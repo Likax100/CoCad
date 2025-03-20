@@ -1,0 +1,14 @@
+#resource_file
+
+~TEXTURE2D_DEF_PATH ./assets/
+~SHADER_DEF_PATH ./src/shaders/ 
+~SPRITESHEET_DEF_PATH ./assets/
+
+::TEXTURE2D
+Frog_Player.png frogp
+
+::SHADER
+def_sprite sprite
+
+::SPRITESHEET
+CroakerGrove_GrassFloor.png 3 1 croaker_grass

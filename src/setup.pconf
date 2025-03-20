@@ -1,0 +1,6 @@
+# COLORS
+. glb_bg 0.15 0.15 0.15
+. glb_mdl_color 0.8 0.8 0.8
+
+# DATA
+. glb_light_loc 1.0 1.0 0.0
