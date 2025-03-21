@@ -13,13 +13,17 @@ class Camera {
 
     glm::mat4 UpdateSphericalCameraClassic(float theta, float phi);
     glm::mat4 GetCurrentCameraView();
-
+    
+    void SetDefaultRotPosition(float theta, float phi);
     void SetZoomDistance(float zoom);
     float GetZoomDistance();
 
     glm::vec2 rotational_pos;
-  
+    bool isUpdated = false;
+    float max_phi = 359.0f;
+    float min_phi = 181.0f;
+
   private:
     glm::vec3 pos;
-    float zoom_d;
+    float zoom_d = 6.0f;
 };

@@ -34,7 +34,9 @@ class App : public Window {
 
   // -------------------- METHODS ------------------- //
   void SetupProgramConfig();
-  
+  void SetupGrid();
+  void RenderGrid();
+
   // -------------------- VARS ------------------- //
   std::map<int, bool> keymap;
   std::map<std::string, glm::vec3> config_data;
@@ -45,12 +47,20 @@ class App : public Window {
   const float glb_FAR = 500.0f;
   glm::mat4 glb_persp_proj;
   glm::mat4 glb_view_matrix;
-  
+ 
+  unsigned int grid_VAO, grid_VBO, grid_EBO;
+  //glm::vec3 grid_line_color = glm::vec3(0.9f, 0.9f, 0.9f);
+  glm::mat4 grid_model_mat = glm::mat4(1.0f);
+  unsigned int grid_vertex_count;
+  unsigned int grid_size = 30;
+  float grid_unit_size = 0.5f;
+  float half_g_length;
+
   Camera camera;
   bool isDragging = false;
   double drag_loc_start_x, drag_loc_start_y;
   double drag_loc_end_x, drag_loc_end_y;
-  float sensitivity = 1.5f;
+  float sensitivity = 5.0f;
 
   ImGuiIO* imgui_io; 
   std::map<std::string, glm::vec2> window_locs;

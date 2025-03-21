@@ -8,7 +8,8 @@
     - Implement docking using ImGUI [ ]
 
 ## BACKEND:
-    - Fix camera movement [ ]
+    - Fix camera movement [X]
+    - Fix Scrolling [X]
     - Implement proper and simple keybind system [ ]
     
     # Feature Development:
