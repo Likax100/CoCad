@@ -31,12 +31,13 @@ void App::SetupProgramConfig() {
     for (unsigned int li = 0; li < setup_file_lines.size(); li++) {
       auto line_tokens = StringUtil::SplitString(setup_file_lines[li], " ");
 
-      if (line_tokens[0] == ".") {
+      if (line_tokens[0] == "." || line_tokens[0] == ".r") {
         if (config_data.count(line_tokens[1]) <= 0) {
           float vec_x = std::stof(line_tokens[2]);
           float vec_y = std::stof(line_tokens[3]);
           float vec_z = std::stof(line_tokens[4]);
-          config_data[line_tokens[1]] = glm::vec3(vec_x, vec_y, vec_z);
+
+          config_data[line_tokens[1]] = line_tokens[0] == ".r" ? Color::RGB((int)vec_x, (int)vec_y, (int)vec_z) : glm::vec3(vec_x, vec_y, vec_z);
         }
       }
     }
@@ -47,7 +48,43 @@ void App::SetupProgramConfig() {
   }
 }
 
-void App::SetupGrid() {
+void App::SetupImGuiStyle() {
+  // set general ui style settings - fonts, etc..
+  imgui_io->Fonts->AddFontDefault();
+  im_font_main = imgui_io->Fonts->AddFontFromFileTTF("./assets/fonts/Roboto-VariableFont.ttf", 28.0f);
+  IM_ASSERT(im_font_main != NULL);
+
+  // convert .pconf file global ui colors into ImGui compatible vectors
+  ImVec4 cocad_ui_bg = ImVec4(config_data["glb_ui_bg"].x, config_data["glb_ui_bg"].y, config_data["glb_ui_bg"].z, 1.0f);
+  ImVec4 cocad_ui_text = ImVec4(config_data["glb_ui_text"].x, config_data["glb_ui_text"].y, config_data["glb_ui_text"].z, 1.0f);
+  ImVec4 cocad_ui_primary = ImVec4(config_data["glb_ui_primary"].x, config_data["glb_ui_primary"].y, config_data["glb_ui_primary"].z, 1.0f);
+  ImVec4 cocad_ui_secondary = ImVec4(config_data["glb_ui_secondary"].x, config_data["glb_ui_secondary"].y, config_data["glb_ui_secondary"].z, 1.0f);
+  ImVec4 cocad_ui_accent = ImVec4(config_data["glb_ui_accent"].x, config_data["glb_ui_accent"].y, config_data["glb_ui_accent"].z, 1.0f);
+
+  // set ui colors
+  imgui_style->Colors[ImGuiCol_WindowBg] = cocad_ui_bg;
+  imgui_style->Colors[ImGuiCol_Text] = cocad_ui_text;
+  
+  imgui_style->Colors[ImGuiCol_TitleBg] = cocad_ui_secondary;
+  imgui_style->Colors[ImGuiCol_TitleBgActive] = cocad_ui_secondary;
+  
+  imgui_style->Colors[ImGuiCol_TabHovered] = cocad_ui_secondary;
+  imgui_style->Colors[ImGuiCol_Tab] = cocad_ui_bg;
+  imgui_style->Colors[ImGuiCol_TabActive] = cocad_ui_secondary;
+
+  imgui_style->Colors[ImGuiCol_FrameBg] = cocad_ui_secondary;
+  imgui_style->Colors[ImGuiCol_FrameBgActive] = cocad_ui_secondary; 
+  imgui_style->Colors[ImGuiCol_FrameBgHovered] = cocad_ui_secondary;
+  imgui_style->Colors[ImGuiCol_SliderGrab] = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+  imgui_style->Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.95f, 0.95f, 0.95f, 1.0f);
+
+  imgui_style->Colors[ImGuiCol_Button] = cocad_ui_secondary;
+  imgui_style->Colors[ImGuiCol_ButtonHovered] = cocad_ui_secondary;
+  imgui_style->Colors[ImGuiCol_ButtonActive] = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+
+}
+
+void App::SetupGrid(bool regen) {
   std::vector<float> grid_vertices;
   std::vector<float> grid_axes_vertices;
 
@@ -96,20 +133,26 @@ void App::SetupGrid() {
   grid_vertices.insert(grid_vertices.end(), {z_blue.x, z_blue.y, z_blue.z}); 
   grid_vertices.insert(grid_vertices.end(), {0.0f, 0.0f, half_g_length}); 
   grid_vertices.insert(grid_vertices.end(), {z_blue.x, z_blue.y, z_blue.z}); 
-
-  glGenVertexArrays(1, &this->grid_VAO);
-  glGenBuffers(1, &this->grid_VBO);
+  
+  if (regen != true) {
+    glGenVertexArrays(1, &this->grid_VAO);
+    glGenBuffers(1, &this->grid_VBO);
+  }
 
   glBindVertexArray(this->grid_VAO);
   glBindBuffer(GL_ARRAY_BUFFER, this->grid_VBO);
   glBufferData(GL_ARRAY_BUFFER, grid_vertices.size() * sizeof(float), grid_vertices.data(), GL_STATIC_DRAW);
-  
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-  glEnableVertexAttribArray(1);
-
   this->grid_vertex_count = grid_vertices.size() / 6;
+
+  if (regen != true) {
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+  }
+  
+  grid_unit_size_prev = grid_unit_size;
+  grid_size_prev = grid_size;
 }
 
 void App::RenderGrid() {
@@ -128,6 +171,14 @@ void App::RenderGrid() {
   glDrawArrays(GL_LINES, grid_vertex_count - 6, 6);
 }
 
+void App::AdjustScalingFromDPI() {
+  // NOTE: we are assuming uniform scaling
+  float scale_x, scale_y;
+  glfwGetWindowContentScale(this->window, &scale_x, &scale_y);
+  std::cout << "STATUS-[SCREEN_SCALE_VALUE] " << scale_x << "\n";
+  imgui_style->ScaleAllSizes(scale_x); 
+}
+
 void App::InitWindow() {
   this->SetupProgramConfig();
 
@@ -140,7 +191,10 @@ void App::InitWindow() {
   glb_shader_3D.setUMat4("m4_view", glb_view_matrix);
   glb_shader_3D.setUMat4("m4_proj", glb_persp_proj);
   glb_shader_3D.setUVec3("v3_light_origin", config_data["glb_light_loc"]);
-  glb_shader_3D.setUVec3("v3_model_color", config_data["glb_mdl_color"]);
+  
+  i_mdl_color = config_data["glb_mdl_color"];
+  glb_shader_3D.setUVec3("v3_model_color", i_mdl_color);
+  glb_shader_3D.setUFloat("diffuse_intensity", this->light_intensity);
   camera.SetZoomDistance(-25.0f);
   camera.SetDefaultRotPosition(45.0f, 225.0f);
   glb_view_matrix = camera.UpdateSphericalCameraClassic(0.0f, 0.0f);
@@ -158,27 +212,43 @@ void App::InitWindow() {
   imgui_io = &ImGui::GetIO(); 
   (void)imgui_io;
   imgui_io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-  //imgui_io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
   ImGui::StyleColorsDark();
   ImGui_ImplGlfw_InitForOpenGL(this->window, true); 
   ImGui_ImplOpenGL3_Init("#version 460");
+  imgui_style = &ImGui::GetStyle();
+  this->SetupImGuiStyle();
+  this->AdjustScalingFromDPI();
  
   // TEMP SOLUTION TO WINDOW SIZING AND LOCATION
-  window_sizes["win_obj_prop"] = glm::vec2(400.0f, fb_height);
+  window_sizes["win_obj_prop"] = glm::vec2(500.0f, fb_height - 700.0f);
   window_locs["win_obj_prop"] = glm::vec2(0.0f, 0.0f);
   
-  window_sizes["win_sesh"] = glm::vec2(400.0f, 400.0f);
+  window_sizes["win_settings"] = glm::vec2(500.0f, 700.0f);
+  window_locs["win_settings"] = glm::vec2(0.0f, fb_height - 700.0f);
+
+  window_sizes["win_sesh"] = glm::vec2(500.0f, 400.0f);
   window_locs["win_sesh"] = glm::vec2(fb_width - window_sizes["win_sesh"].x, 0.0f);
   
-  window_sizes["win_chat"] = glm::vec2(400.0f, fb_height - 400.0f);
+  window_sizes["win_chat"] = glm::vec2(500.0f, fb_height - 400.0f);
   window_locs["win_chat"] = glm::vec2(fb_width - window_sizes["win_chat"].x, fb_height - window_sizes["win_chat"].y);
 
+  // Loading and Setting Up Model 
   kube = OBJLoader::LoadModel("./assets/models/monke.obj"); 
-  //kube.mdl_matrix = glm::scale(kube.mdl_matrix, glm::vec3(0.5f, 0.5f, 0.5f));
+  
+  Editor::GenerateRepr(kube);
+  Editor::SetUp(&this->camera, this->fb_width, this->fb_height);
+  Editor::repr.sel_color = config_data["edit_vert_sel"];
+  Editor::repr.desel_color = config_data["edit_vert_desel"];
 
-  //glm::mat4 proj_ortho = glm::ortho(0.0f, (float)this->w_width, (float)this->w_height, 0.0f, -1.0f, 1.0f);
+  ResourceManager::GenShader("./src/shaders/baser_i.vs", "./src/shaders/baser_i.fs", "baser_i");
+  glb_shader_vert = ResourceManager::GetShader("baser_i");
+  glb_shader_vert.Use();
+  glb_shader_vert.setUMat4("m4_view", glb_view_matrix);
+  glb_shader_vert.setUMat4("m4_proj", glb_persp_proj);
+  glb_shader_vert.setUFloat("alpha", 1.0f);
+
+  bg_col = config_data["glb_bg"];
   this->SetupGrid();
-
   this->LimitFPS(true, 60);
 }
 
@@ -189,8 +259,7 @@ void App::InitWindow() {
 void App::MouseButtonInput(int button, int action, int mods) {
   if (button == GLFW_MOUSE_BUTTON_MIDDLE) { 
     if (action == GLFW_PRESS) {
-      double mouse_x, mouse_y;
-      glfwGetCursorPos(this->window, &mouse_x, &mouse_y);
+      glfwGetCursorPos(this->window, &this->mouse_x, &this->mouse_y);
 
       if (isDragging == false) { 
         drag_loc_start_x = mouse_x; 
@@ -206,6 +275,12 @@ void App::MouseButtonInput(int button, int action, int mods) {
 
   if (action == GLFW_PRESS) {
     keymap[button] = true;
+    glfwGetCursorPos(this->window, &this->mouse_x, &this->mouse_y);
+
+    if (button == GLFW_MOUSE_BUTTON_LEFT && Editor::GetSelectionMode() != COCAD_SELMODE_NONE) {
+      Editor::CastRay(this->mouse_x, this->mouse_y, this->glb_view_matrix, this->glb_persp_proj);
+    }
+
   } else { 
     keymap[button] = false;
   }
@@ -216,6 +291,9 @@ void App::MouseScrollInput(double xoffset, double yoffset) {
   float n_zoom = camera.GetZoomDistance() + (0.5f * (float)yoffset);
   camera.SetZoomDistance(n_zoom);
   glb_view_matrix = camera.UpdateSphericalCameraClassic(0.0f, 0.0f);
+
+  float mvd_new_scale = (float)yoffset * 0.00025f;
+  Editor::UpdateVertOverlayInstanceScale(-mvd_new_scale);
 }
 
 
@@ -229,9 +307,11 @@ void App::KeyboardInput(int key, int scancode, int action, int mods) {
 //                    --- UPDATE LOOP ---
 // ============================================================= //
 void App::Update() {
+  
+  // Updating Camera
   glfwGetCursorPos(this->window, &drag_loc_end_x, &drag_loc_end_y);
-  double dt_x = (drag_loc_end_x - drag_loc_start_x) / sensitivity;  
-  double dt_y = (drag_loc_end_y - drag_loc_start_y) / sensitivity;  
+  double dt_x = (drag_loc_end_x - drag_loc_start_x) / camera.sensitivity;  
+  double dt_y = (drag_loc_end_y - drag_loc_start_y) / camera.sensitivity;  
 
   if (keymap[GLFW_MOUSE_BUTTON_MIDDLE]) {
     glb_view_matrix = camera.UpdateSphericalCameraClassic(-dt_x, dt_y);
@@ -245,8 +325,20 @@ void App::Update() {
       camera.isUpdated = false;
     }
   }
-}
 
+  // Updating Light Position
+  glm::vec3 new_light_loc = glm::normalize(glm::vec3(camera.pos.x, camera.pos.y, camera.pos.z));
+  glb_shader_3D.Use();
+  glb_shader_3D.setUVec3("v3_light_origin", new_light_loc);
+
+
+  // KEYBOARD STUFF FINALLY!
+  if (keymap[GLFW_KEY_0]) { Editor::SetSelectionMode(COCAD_SELMODE_NONE); }
+  else if (keymap[GLFW_KEY_1]) { Editor::SetSelectionMode(COCAD_SELMODE_VERT); }
+  else if (keymap[GLFW_KEY_2]) { Editor::SetSelectionMode(COCAD_SELMODE_EDGE); }
+  else if (keymap[GLFW_KEY_3]) { Editor::SetSelectionMode(COCAD_SELMODE_FACE); }
+
+}
 
 // ============================================================= //
 //                    --- RENDER LOOP ---
@@ -254,25 +346,34 @@ void App::Update() {
 void App::Render() {
   glEnable(GL_DEPTH_TEST);
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-  glClearColor(config_data["glb_bg"].r, config_data["glb_bg"].g, config_data["glb_bg"].b, 1.0f);
+  glClearColor(bg_col.r, bg_col.g, bg_col.b, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   this->RenderGrid();
 
   glb_shader_3D.Use();
-  glb_shader_3D.setUInt("ren_mode", 1);
-  glm::vec3 newcol = glm::vec3(def_colorp_color[0], def_colorp_color[1], def_colorp_color[2]);
-  glb_shader_3D.setUVec3("v3_model_color", newcol);
   glb_shader_3D.setUMat4("m4_view", glb_view_matrix);
-  
+  glb_shader_3D.setUFloat("diffuse_intensity", light_intensity);
   glb_shader_3D.setUMat4("m4_model", kube.mdl_matrix);
+  //kube.mdl_matrix = glm::scale(kube.mdl_matrix, glm::vec3(0.5f, 0.5f, 0.5f));
   kube.RenderModel(glb_shader_3D);
 
+  if (Editor::GetSelectionMode() == COCAD_SELMODE_VERT) {
+    glb_shader_vert.Use();
+    glb_shader_vert.setUMat4("m4_view", glb_view_matrix);
+    Editor::RenderVertOverlay(glb_shader_vert);   
+  }
+
+  if (grid_size != grid_size_prev || grid_unit_size != grid_unit_size_prev) {
+    this->SetupGrid(true);
+  }
 
   // ==================== UI ========================= //
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
+
+  ImGui::PushFont(im_font_main);
 
   //ImVec2 center = ImGui::GetMainViewport()->GetCenter();
   //ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -280,30 +381,74 @@ void App::Render() {
   ImGui::SetNextWindowPos(ImVec2(window_locs["win_obj_prop"].x, window_locs["win_obj_prop"].y));
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_obj_prop"].x, window_sizes["win_obj_prop"].y));
 
-  ImGui::Begin("Object Properties");
-  ImGui::Text("-- Transform --");
-  ImGui::Text("Location/Origin:");
-  ImGui::Text("X: 0.0   Y: 0.0    Z: 0.0");
-  ImGui::Text("Scale:");
-  ImGui::Text("X: 1.0   Y: 1.0    Z: 1.0");
+  CoCadUI::WindowStart("Model Properties");
   
-  ImGui::Text("-- Preview --");
-  ImGui::ColorPicker3("Object Color", def_colorp_color);
-  ImGui::Text(glm::to_string(camera.rotational_pos).c_str());
-  ImGui::SliderFloat("Sensitivity: ", &sensitivity, 0.1f, 20.0f); 
-  ImGui::End();
+  CoCadUI::WindowEnd();
+
+  ImGui::SetNextWindowPos(ImVec2(window_locs["win_settings"].x, window_locs["win_settings"].y));
+  ImGui::SetNextWindowSize(ImVec2(window_sizes["win_settings"].x, window_locs["win_settings"].y));
+
+  CoCadUI::WindowStart("Settings");
+  ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 0.0f);
+  ImGui::BeginTabBar("#left_tabs_bar");
+  if (ImGui::BeginTabItem("General")) {
+    
+    ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.50f);
+    ImGui::SliderFloat(" Camera Sensitivity", &camera.sensitivity, 0.5f, 25.0f, "%.1f");
+    ImGui::SliderFloat(" Light Intensity", &light_intensity, 0.0f, 1.0f, "%.2f");
+    ImGui::PopItemWidth();
+  
+    ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.45f);
+    ImGui::InputFloat(" Grid Unit Size", &grid_unit_size, 0.1f, 1.0f, "%.2f");
+    grid_unit_size = MathUtil::Clamp(grid_unit_size, 0.0f, 500.0f);
+    ImGui::InputInt(" Grid Size", &grid_size);
+    grid_size = (int)MathUtil::Clamp((float)grid_size, 0.0f, 5000.0f);
+    ImGui::PopItemWidth();
+    ImGui::EndTabItem();
+  }
+
+  if (ImGui::BeginTabItem("Colors")) {
+    
+    /* @TODO: Fix this - doesnt match color + crashes applications especially when in edit mode for some reason
+     * note: problem stems from config_data i believe, removing intermediate variables would probably solve the problem
+    */ // 02:00 Lukas Note - 17/04/2025
+    CoCadUI::PopColorPicker("Background Color", CoCadUI::GlmVec3ToImVec4(config_data["glb_bg"]));
+    ImVec4 bg_col_vec4 = CoCadUI::col_pop_pickers["Background Color"].color;
+    bg_col = glm::vec3(bg_col_vec4.x, bg_col_vec4.y, bg_col_vec4.z);
+
+    CoCadUI::PopColorPicker("Model Color", CoCadUI::GlmVec3ToImVec4(config_data["glb_mdl_color"]));
+    ImVec4 mdl_color = CoCadUI::col_pop_pickers["Model Color"].color;
+    glb_shader_3D.Use();
+    glb_shader_3D.setUVec3("v3_model_color", mdl_color);
+
+    CoCadUI::PopColorPicker("Vertex Color", CoCadUI::GlmVec3ToImVec4(config_data["edit_vert_desel"]));
+    ImVec4 vert_col = CoCadUI::col_pop_pickers["Vertex Color"].color;
+    Editor::repr.desel_color = glm::vec3(vert_col.x, vert_col.y, vert_col.z);
+
+    CoCadUI::PopColorPicker("Vertex Selected Color", ImVec4(config_data["edit_vert_sel"].x, config_data["edit_vert_sel"].y, config_data["edit_vert_sel"].z, 1.0f));
+    ImVec4 vert_sel_col = CoCadUI::col_pop_pickers["Vertex Selected Color"].color;
+    Editor::repr.sel_color = glm::vec3(vert_sel_col.x, vert_sel_col.y, vert_sel_col.z);
+    /**/
+
+    ImGui::EndTabItem();
+  }
+
+  ImGui::EndTabBar();
+  ImGui::PopStyleVar();
+  CoCadUI::WindowEnd();
+
   ImGui::SetNextWindowPos(ImVec2(window_locs["win_chat"].x, window_locs["win_chat"].y));
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_chat"].x, window_sizes["win_chat"].y));
 
-  ImGui::Begin("Chat");
+  CoCadUI::WindowStart("Chat");
   ImGui::Text("[User 1]: Hello, how is the project going?");
   ImGui::Text("[User 2]: Hi! its going okay :)");
-  ImGui::End();
+  CoCadUI::WindowEnd();
  
   ImGui::SetNextWindowPos(ImVec2(window_locs["win_sesh"].x, window_locs["win_sesh"].y));
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_sesh"].x, window_sizes["win_sesh"].y));
 
-  ImGui::Begin("Session Settings");
+  CoCadUI::WindowStart("Session Settings");
   if (ImGui::Button("Host Session")) {
     std::cout << "[DEBUG] Hosting session...";
   }
@@ -312,7 +457,9 @@ void App::Render() {
     std::cout << "[DEBUG] Ending Session..";
   }
   ImGui::Text("Session ID: 027xf2");
-  ImGui::End();
+  CoCadUI::WindowEnd();
+
+  ImGui::PopFont();
 
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

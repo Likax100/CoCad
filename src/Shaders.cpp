@@ -77,6 +77,10 @@ void Shader::SetShaderName(std::string name) {
   this->shaderName = name;
 }
 
+std::string Shader::GetShaderName() {
+  return this->shaderName;
+}
+
 //Uniform Function Definitions 
 void Shader::setUInt(const char* uniform_name, int uniform_value) const {
   glUniform1i(glGetUniformLocation(this->programID, uniform_name), uniform_value);

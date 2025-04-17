@@ -13,7 +13,7 @@
     - Implement proper and simple keybind system [ ]
     
     # Feature Development:
-    - Model data selection [ ]
+    - Model data selection [ ] <- currently working on
     - Vertex/Edge/Face transformation [ ] <- save on copy of mdl
     - Revert model to original state [ ]
     # Server Development:

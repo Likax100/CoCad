@@ -18,6 +18,7 @@ public:
   void Use() const;
   void configStatus(bool statusEnable);
   void SetShaderName(std::string name); 
+  std::string GetShaderName();
 
   // Uniform Setting Functions - TODO: Add feautre to AUTO use shader before setting if not used already
   void setUInt(const char* uniform_name, int uniform_value) const; 

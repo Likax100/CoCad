@@ -27,6 +27,10 @@ glm::mat4 Camera::GetCurrentCameraView() {
   return this->UpdateSphericalCameraClassic(rotational_pos.x, rotational_pos.y);
 }
 
+glm::mat4 Camera::GetCameraModelMat() {
+  return glm::mat4(1.0f);
+}
+
 glm::mat4 Camera::UpdateSphericalCameraClassic(float theta, float phi) {
   //NOTE: theta = angle along xy-plane, hence this controls horizontal rotation
   //      phi = angle between point-vector and +vertical (Y) axis, hence controls vertical rotation

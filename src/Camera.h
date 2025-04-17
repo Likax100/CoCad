@@ -13,6 +13,7 @@ class Camera {
 
     glm::mat4 UpdateSphericalCameraClassic(float theta, float phi);
     glm::mat4 GetCurrentCameraView();
+    glm::mat4 GetCameraModelMat();
     
     void SetDefaultRotPosition(float theta, float phi);
     void SetZoomDistance(float zoom);
@@ -22,8 +23,9 @@ class Camera {
     bool isUpdated = false;
     float max_phi = 359.0f;
     float min_phi = 181.0f;
+    float sensitivity = 5.0f;
 
-  private:
     glm::vec3 pos;
+  private:
     float zoom_d = 6.0f;
 };

@@ -5,7 +5,9 @@
 #include "Colors.h"
 #include "ModelLoader.h"
 #include "Camera.h"
+#include "Editor.h"
 #include "CoCad_Utils.h"
+#include "CoCad_UI.h"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
@@ -34,38 +36,51 @@ class App : public Window {
 
   // -------------------- METHODS ------------------- //
   void SetupProgramConfig();
-  void SetupGrid();
+  void SetupImGuiStyle();
+  void AdjustScalingFromDPI();
+  void SetupGrid(bool regen = false);
   void RenderGrid();
 
   // -------------------- VARS ------------------- //
   std::map<int, bool> keymap;
   std::map<std::string, glm::vec3> config_data;
-  
+  double mouse_x, mouse_y;
+
   Shader glb_shader_3D;
+  Shader glb_shader_vert;
+  Shader glb_test_shader;
+
   float glb_fov = 50.0f;
   const float glb_NEAR = 0.1f;
   const float glb_FAR = 500.0f;
   glm::mat4 glb_persp_proj;
   glm::mat4 glb_view_matrix;
  
-  unsigned int grid_VAO, grid_VBO, grid_EBO;
-  //glm::vec3 grid_line_color = glm::vec3(0.9f, 0.9f, 0.9f);
+  unsigned int grid_VAO, grid_VBO;
   glm::mat4 grid_model_mat = glm::mat4(1.0f);
   unsigned int grid_vertex_count;
-  unsigned int grid_size = 30;
+  int grid_size = 30;
   float grid_unit_size = 0.5f;
+  int grid_size_prev = grid_size;
+  float grid_unit_size_prev = grid_size_prev;
   float half_g_length;
 
   Camera camera;
   bool isDragging = false;
   double drag_loc_start_x, drag_loc_start_y;
   double drag_loc_end_x, drag_loc_end_y;
-  float sensitivity = 5.0f;
+  float light_intensity = 0.5f;
 
   ImGuiIO* imgui_io; 
+  ImGuiStyle* imgui_style;
+  ImFont* im_font_main;
   std::map<std::string, glm::vec2> window_locs;
   std::map<std::string, glm::vec2> window_sizes;
-  float def_colorp_color[3] = {0.8f, 0.8f, 0.8f};
+  glm::vec3 bg_col;
+  glm::vec3 i_mdl_color;
 
   Model kube;
+
+  // TESTING VARS ####################################
+
 }; 
