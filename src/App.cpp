@@ -1,9 +1,7 @@
 #include "App.h"
 
 #include <glm/glm.hpp> 
-#include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/string_cast.hpp>
 
 #define FBO_WIDTH w_width * monitor_scale_x
 #define FBO_HEIGHT w_height * monitor_scale_y
@@ -37,7 +35,8 @@ void App::SetupProgramConfig() {
           float vec_y = std::stof(line_tokens[3]);
           float vec_z = std::stof(line_tokens[4]);
 
-          config_data[line_tokens[1]] = line_tokens[0] == ".r" ? Color::RGB((int)vec_x, (int)vec_y, (int)vec_z) : glm::vec3(vec_x, vec_y, vec_z);
+          //config_data[line_tokens[1]] = (line_tokens[0] == ".r") ? CoCad::Color::RGB((int)vec_x, (int)vec_y, (int)vec_z) : glm::vec3(vec_x, vec_y, vec_z);
+          config_data[line_tokens[1]] = (line_tokens[0] == ".r") ? glm::vec3(vec_x/255.0f, vec_y/255.0f, vec_z/255.0f) : glm::vec3(vec_x, vec_y, vec_z);
         }
       }
     }
@@ -53,6 +52,13 @@ void App::SetupImGuiStyle() {
   imgui_io->Fonts->AddFontDefault();
   im_font_main = imgui_io->Fonts->AddFontFromFileTTF("./assets/fonts/Roboto-VariableFont.ttf", 28.0f);
   IM_ASSERT(im_font_main != NULL);
+
+  ImFontConfig config;
+  config.MergeMode = true;
+  config.GlyphMinAdvanceX = 13.0f;
+  static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+  im_font_icon = imgui_io->Fonts->AddFontFromFileTTF("./assets/fonts/Font Awesome 6 Solid-900.otf", 28.0f, &config, icon_ranges);
+  IM_ASSERT(im_font_icon != NULL);
 
   // convert .pconf file global ui colors into ImGui compatible vectors
   ImVec4 cocad_ui_bg = ImVec4(config_data["glb_ui_bg"].x, config_data["glb_ui_bg"].y, config_data["glb_ui_bg"].z, 1.0f);
@@ -128,7 +134,8 @@ void App::SetupGrid(bool regen) {
   grid_vertices.insert(grid_vertices.end(), {0.0f, 0.8f, 0.0f}); 
 
   // Z - AXIS
-  glm::vec3 z_blue = Color::RGB(14, 107, 237);
+  //glm::vec3 z_blue = CoCad::Color::RGB(14, 107, 237);
+  glm::vec3 z_blue = glm::vec3(14.0f/255.0f, 107.0f/255.0f, 237.0f/255.0f);
   grid_vertices.insert(grid_vertices.end(), {0.0f, 0.0f, -half_g_length}); 
   grid_vertices.insert(grid_vertices.end(), {z_blue.x, z_blue.y, z_blue.z}); 
   grid_vertices.insert(grid_vertices.end(), {0.0f, 0.0f, half_g_length}); 
@@ -182,6 +189,9 @@ void App::AdjustScalingFromDPI() {
 void App::InitWindow() {
   this->SetupProgramConfig();
 
+  // ============= NETWORK SETUP ============= //
+  cc_client.connect("127.0.0.1", 60000);
+
   // ============= GLOBAL SETUP ============== //
   ResourceManager::GenShader("./src/shaders/def3D.vs", "./src/shaders/def3D.fs", "def3d");
   glb_shader_3D = ResourceManager::GetShader("def3d");
@@ -192,19 +202,18 @@ void App::InitWindow() {
   glb_shader_3D.setUMat4("m4_proj", glb_persp_proj);
   glb_shader_3D.setUVec3("v3_light_origin", config_data["glb_light_loc"]);
   
-  i_mdl_color = config_data["glb_mdl_color"];
-  glb_shader_3D.setUVec3("v3_model_color", i_mdl_color);
+  //glb_shader_3D.setUVec3("v3_model_color", config_data["glb_mdl_color"]);
   glb_shader_3D.setUFloat("diffuse_intensity", this->light_intensity);
   camera.SetZoomDistance(-25.0f);
   camera.SetDefaultRotPosition(45.0f, 225.0f);
   glb_view_matrix = camera.UpdateSphericalCameraClassic(0.0f, 0.0f);
 
   ResourceManager::GenShader("./src/shaders/baser.vs", "./src/shaders/baser.fs", "baser");
-  Shader baser = ResourceManager::GetShader("baser");
-  baser.Use();
-  baser.setUMat4("m4_view", glb_view_matrix);
-  baser.setUMat4("m4_proj", glb_persp_proj);
-  baser.setUMat4("m4_model", grid_model_mat);
+  glb_shader_baser = ResourceManager::GetShader("baser");
+  glb_shader_baser.Use();
+  glb_shader_baser.setUMat4("m4_view", glb_view_matrix);
+  glb_shader_baser.setUMat4("m4_proj", glb_persp_proj);
+  glb_shader_baser.setUMat4("m4_model", grid_model_mat);
 
   IMGUI_CHECKVERSION(); 
   ImGui::CreateContext();
@@ -218,13 +227,20 @@ void App::InitWindow() {
   imgui_style = &ImGui::GetStyle();
   this->SetupImGuiStyle();
   this->AdjustScalingFromDPI();
- 
+
+  // Login Window
+  window_sizes["win_login"] = glm::vec2(fb_width, fb_height);
+  window_locs["win_login"] = glm::vec2(0.0f, 0.0f);
+
   // TEMP SOLUTION TO WINDOW SIZING AND LOCATION
-  window_sizes["win_obj_prop"] = glm::vec2(500.0f, fb_height - 700.0f);
+  window_sizes["win_obj_prop"] = glm::vec2(500.0f, fb_height - 900.0f);
   window_locs["win_obj_prop"] = glm::vec2(0.0f, 0.0f);
-  
-  window_sizes["win_settings"] = glm::vec2(500.0f, 700.0f);
-  window_locs["win_settings"] = glm::vec2(0.0f, fb_height - 700.0f);
+ 
+  window_sizes["win_tools"] = glm::vec2(500.0f, 400.0f);
+  window_locs["win_tools"] = glm::vec2(0.0f, fb_height - 900.0f);
+
+  window_sizes["win_settings"] = glm::vec2(500.0f, 500.0f);
+  window_locs["win_settings"] = glm::vec2(0.0f, fb_height - 500.0f);
 
   window_sizes["win_sesh"] = glm::vec2(500.0f, 400.0f);
   window_locs["win_sesh"] = glm::vec2(fb_width - window_sizes["win_sesh"].x, 0.0f);
@@ -232,13 +248,15 @@ void App::InitWindow() {
   window_sizes["win_chat"] = glm::vec2(500.0f, fb_height - 400.0f);
   window_locs["win_chat"] = glm::vec2(fb_width - window_sizes["win_chat"].x, fb_height - window_sizes["win_chat"].y);
 
-  // Loading and Setting Up Model 
-  kube = OBJLoader::LoadModel("./assets/models/monke.obj"); 
+  // Loading and Setting Up Model
+  // load default cube if no model selected
+  mdl = OBJLoader::LoadModel("./assets/models/cube.obj"); 
   
-  Editor::GenerateRepr(kube);
-  Editor::SetUp(&this->camera, this->fb_width, this->fb_height);
+  Editor::r_repr.mdl_color = config_data["glb_mdl_color"];
   Editor::repr.sel_color = config_data["edit_vert_sel"];
   Editor::repr.desel_color = config_data["edit_vert_desel"];
+  Editor::GenerateRepr(mdl);
+  Editor::SetUp(&this->camera, this->fb_width, this->fb_height);
 
   ResourceManager::GenShader("./src/shaders/baser_i.vs", "./src/shaders/baser_i.fs", "baser_i");
   glb_shader_vert = ResourceManager::GetShader("baser_i");
@@ -247,7 +265,12 @@ void App::InitWindow() {
   glb_shader_vert.setUMat4("m4_proj", glb_persp_proj);
   glb_shader_vert.setUFloat("alpha", 1.0f);
 
-  bg_col = config_data["glb_bg"];
+  bg_col = CoCadUI::GlmVec3ToImVec4(config_data["glb_bg"]);
+  i_mdl_color = CoCadUI::GlmVec3ToImVec4(config_data["glb_mdl_color"]);
+  i_dvert_color = CoCadUI::GlmVec3ToImVec4(config_data["edit_vert_desel"]);
+  i_svert_color = CoCadUI::GlmVec3ToImVec4(config_data["edit_vert_sel"]);
+  accent_col = CoCadUI::GlmVec3ToImVec4(config_data["glb_ui_accent"]);
+
   this->SetupGrid();
   this->LimitFPS(true, 60);
 }
@@ -257,8 +280,12 @@ void App::InitWindow() {
 //                  --- INPUT SECTION ---
 // ============================================================= //
 void App::MouseButtonInput(int button, int action, int mods) {
+  if (imgui_io->WantCaptureMouse) { return; } // disable mouse actions when interacting with imgui windows  
+
+
   if (button == GLFW_MOUSE_BUTTON_MIDDLE) { 
     if (action == GLFW_PRESS) {
+      
       glfwGetCursorPos(this->window, &this->mouse_x, &this->mouse_y);
 
       if (isDragging == false) { 
@@ -273,7 +300,7 @@ void App::MouseButtonInput(int button, int action, int mods) {
   }
 
 
-  if (action == GLFW_PRESS) {
+  if (action == GLFW_PRESS && mouse_click_handled == false) {
     keymap[button] = true;
     glfwGetCursorPos(this->window, &this->mouse_x, &this->mouse_y);
 
@@ -281,8 +308,15 @@ void App::MouseButtonInput(int button, int action, int mods) {
       Editor::CastRay(this->mouse_x, this->mouse_y, this->glb_view_matrix, this->glb_persp_proj);
     }
 
+    if (button == GLFW_MOUSE_BUTTON_LEFT && Editor::move_mode_active) {
+      Editor::move_mode_active = false;
+      Editor::move_dat_update = true;
+    }
+
+    mouse_click_handled = true;
   } else { 
     keymap[button] = false;
+    mouse_click_handled = false;
   }
 
 }
@@ -298,16 +332,82 @@ void App::MouseScrollInput(double xoffset, double yoffset) {
 
 
 void App::KeyboardInput(int key, int scancode, int action, int mods) {
-  if (action == GLFW_PRESS) { keymap[key] = true; }
-  else if (action == GLFW_RELEASE) { keymap[key] = false; }
+  if (imgui_io->WantCaptureKeyboard) { 
+    return; //disables glfw key processing if in imgui window :) 
+  }
+  
+  active_keymod = mods;
+
+  if (action == GLFW_PRESS) { keymap[key] = true;}
+  else if (action == GLFW_RELEASE) { keymap[key] = false;}
+
+  // handle single press processed keybinds
+  if (action == GLFW_PRESS) {
+    if (key == GLFW_KEY_M) {
+      if (Editor::GetSelectionMode() != COCAD_SELMODE_NONE) { Editor::move_mode_active = !Editor::move_mode_active; }
+      glfwGetCursorPos(this->window, &start_loc_x, &start_loc_y);
+    }
+
+    if (key == GLFW_KEY_P) { 
+      std::cout << "[SELF] Attempting to ping server...\n";
+      cc_client.PingServer(); 
+    }
+
+    if (key == GLFW_KEY_X) { 
+      axis_locked[0] = true; axis_locked[1] = false; axis_locked[2] = false; }
+
+    else if (key == GLFW_KEY_Y) { 
+      axis_locked[0] = false; axis_locked[1] = true; axis_locked[2] = false; }
+
+    else if (key == GLFW_KEY_Z) { 
+      axis_locked[0] = false; axis_locked[1] = false; axis_locked[2] = true; }
+  }
+
 }
 
 
 // ============================================================= //
 //                    --- UPDATE LOOP ---
 // ============================================================= //
+void App::ProcessClient() {
+  if (cc_client.is_connected()) {
+    if (!cc_client.get_incoming_queue().empty()) {
+      auto m = cc_client.get_incoming_queue().pop_front().m;
+
+      switch (m.head.ID) {
+        case MessageTypes::ServerAccept:
+          std::cout << "Server has accepted the connection!\n";
+          break;
+
+        case MessageTypes::ServerPing:
+          std::cout << "Pinging Bounced back and successful :)\n";
+          break;
+
+        case MessageTypes::ccAuthenticationOutcome: {
+          if (m.dat[0] == "1") {
+            logged_in = true;
+            user.username = login_username;
+            user.pass = login_password;
+            user.client_ID = std::stoi(m.dat[1]);
+            user.is_host = false;
+          }
+          std::string outc = m.dat[0] == "1" ? "Success" : "Failure";
+          std::cout << "[SERVER-RESPONSE] Authentication Outcome " << outc << "\n";
+        } break;
+      
+      }
+
+    }
+  }
+}
+
 void App::Update() {
-  
+  ProcessClient();
+
+  // -- set global editor selected verts set
+  Editor::sel_unique_verts.clear();
+  Editor::sel_unique_verts = std::set(Editor::repr.selected_verts.begin(), Editor::repr.selected_verts.end());
+
   // Updating Camera
   glfwGetCursorPos(this->window, &drag_loc_end_x, &drag_loc_end_y);
   double dt_x = (drag_loc_end_x - drag_loc_start_x) / camera.sensitivity;  
@@ -331,12 +431,73 @@ void App::Update() {
   glb_shader_3D.Use();
   glb_shader_3D.setUVec3("v3_light_origin", new_light_loc);
 
+  if (active_keymod == GLFW_MOD_CONTROL) {
+    Editor::PassModKeyControl(true); 
+  } else { Editor::PassModKeyControl(false); }
 
-  // KEYBOARD STUFF FINALLY!
+  // KEYBOARD INPUT MANAGEMENT 
   if (keymap[GLFW_KEY_0]) { Editor::SetSelectionMode(COCAD_SELMODE_NONE); }
   else if (keymap[GLFW_KEY_1]) { Editor::SetSelectionMode(COCAD_SELMODE_VERT); }
   else if (keymap[GLFW_KEY_2]) { Editor::SetSelectionMode(COCAD_SELMODE_EDGE); }
   else if (keymap[GLFW_KEY_3]) { Editor::SetSelectionMode(COCAD_SELMODE_FACE); }
+
+  // PROCESS OPERATIONS
+  // -- moving selected verts
+  if (Editor::move_mode_active) {
+
+    float move_by_y = (drag_loc_end_y - start_loc_y) / 120.0f;
+    float move_by_x = (drag_loc_end_x - start_loc_x) / 120.0f;
+    
+    for (auto v_sel: Editor::sel_unique_verts) {
+      
+      /*
+      // free move mode calcs
+      float vx = Editor::repr.og_vert_cpy[(v_sel*3)];
+      float vy = Editor::repr.og_vert_cpy[(v_sel*3)+1];
+      float vz = Editor::repr.og_vert_cpy[(v_sel*3)+2];
+      glm::vec3 p = glm::vec3(vx, vy, vz);
+
+      glm::vec3 plane_normal = glm::normalize(camera.pos - p);
+      
+      // -- selecting random vector to find perpendicular component of plane normal
+      glm::vec3 random_vec;
+      if (abs(plane_normal.y) < 0.99f) { random_vec = glm::vec3(0.0f, 1.0f, 0.0f); }
+      else { random_vec = glm::vec3(1.0f, 0.0f, 0.0f); }
+      
+      glm::vec3 plane_tangent_x = glm::normalize(glm::cross(plane_normal, random_vec));
+      glm::vec3 plane_tangent_y = glm::normalize(glm::cross(plane_normal, plane_tangent_y)); //calc second so moving point is easier
+
+      glm::vec3 offset = (move_by_x * plane_tangent_x) + (move_by_y * plane_tangent_y);
+      offset.y = -offset.y;
+
+      Editor::repr.unique_verts[(v_sel*3)] = Editor::repr.og_vert_cpy[(v_sel*3)] + offset.x;
+      Editor::repr.unique_verts[(v_sel*3)+1] = Editor::repr.og_vert_cpy[(v_sel*3)+1] + offset.y;
+      Editor::repr.unique_verts[(v_sel*3)+2] = Editor::repr.og_vert_cpy[(v_sel*3)+2] + offset.z;
+
+      Editor::mvd_c_positions[v_sel] = Editor::og_mvdc_pos_cpy[v_sel] + offset;*/
+   
+      // locked movement mode
+      if (axis_locked[0]) {
+        Editor::repr.unique_verts[(v_sel*3)] = Editor::repr.og_vert_cpy[(v_sel*3)] + move_by_x;
+        Editor::mvd_c_positions[v_sel].x = Editor::og_mvdc_pos_cpy[v_sel].x + move_by_x;
+      } else if (axis_locked[1]) {
+        Editor::repr.unique_verts[(v_sel*3)+1] = Editor::repr.og_vert_cpy[(v_sel*3)+1] - move_by_y;
+        Editor::mvd_c_positions[v_sel].y = Editor::og_mvdc_pos_cpy[v_sel].y - move_by_y;
+      } else if (axis_locked[2]) {
+        Editor::repr.unique_verts[(v_sel*3)+2] = Editor::repr.og_vert_cpy[(v_sel*3)+2] + move_by_y;
+        Editor::mvd_c_positions[v_sel].z = Editor::og_mvdc_pos_cpy[v_sel].z + move_by_y;
+      }
+    }
+
+    Editor::edge_data_updated = true;
+    Editor::instance_data_updated = true;
+  }
+
+  if (Editor::move_dat_update) {
+    Editor::repr.og_vert_cpy = Editor::repr.unique_verts;
+    Editor::og_mvdc_pos_cpy = Editor::mvd_c_positions;
+    Editor::move_dat_update = false;
+  }
 
 }
 
@@ -346,7 +507,7 @@ void App::Update() {
 void App::Render() {
   glEnable(GL_DEPTH_TEST);
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-  glClearColor(bg_col.r, bg_col.g, bg_col.b, 1.0f);
+  glClearColor(bg_col.x, bg_col.y, bg_col.z, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   this->RenderGrid();
@@ -354,14 +515,26 @@ void App::Render() {
   glb_shader_3D.Use();
   glb_shader_3D.setUMat4("m4_view", glb_view_matrix);
   glb_shader_3D.setUFloat("diffuse_intensity", light_intensity);
-  glb_shader_3D.setUMat4("m4_model", kube.mdl_matrix);
-  //kube.mdl_matrix = glm::scale(kube.mdl_matrix, glm::vec3(0.5f, 0.5f, 0.5f));
-  kube.RenderModel(glb_shader_3D);
+  glb_shader_3D.setUMat4("m4_model", mdl.mdl_matrix);
+  Editor::r_repr.mdl_color = CoCadUI::ImVec4ToGlmVec3(i_mdl_color);
+  Editor::SetSelectionColors(CoCadUI::ImVec4ToGlmVec3(i_svert_color), CoCadUI::ImVec4ToGlmVec3(i_dvert_color));
+  Editor::SetMVDScalings(mvd_size, mvd_sel_radius_fact);
 
-  if (Editor::GetSelectionMode() == COCAD_SELMODE_VERT) {
-    glb_shader_vert.Use();
-    glb_shader_vert.setUMat4("m4_view", glb_view_matrix);
+  Editor::Render(glb_shader_3D);
+
+  glb_shader_vert.Use();
+  glb_shader_vert.setUMat4("m4_view", glb_view_matrix);
+
+  glb_shader_baser.Use();
+  glb_shader_baser.setUMat4("m4_view", glb_view_matrix);
+  
+  unsigned int prev_selection_mode = Editor::GetSelectionMode();
+  
+  if (prev_selection_mode == COCAD_SELMODE_VERT) {
     Editor::RenderVertOverlay(glb_shader_vert);   
+  } 
+  if (prev_selection_mode == COCAD_SELMODE_EDGE) {
+    Editor::RenderEdgeOverlay(glb_shader_baser);
   }
 
   if (grid_size != grid_size_prev || grid_unit_size != grid_unit_size_prev) {
@@ -382,6 +555,90 @@ void App::Render() {
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_obj_prop"].x, window_sizes["win_obj_prop"].y));
 
   CoCadUI::WindowStart("Model Properties");
+  bool entries_modified = false;
+
+  ImGui::Text("Model Origin:");
+  entries_modified |= ImGui::InputFloat3("##Model Origin", Editor::mdl_glb_position, "%.2f");
+  ImGui::Text("Model Scale:");
+  entries_modified |= ImGui::InputFloat3("##Model Scale", Editor::mdl_glb_scale, "%.2f");
+  ImGui::Text("Model Rotation:");
+  entries_modified |= ImGui::InputInt3("##Model Rotation", Editor::mdl_glb_rot);
+
+  if (entries_modified) { Editor::mdl_glb_updated = true; }
+
+  CoCadUI::WindowEnd();
+
+  ImGui::SetNextWindowPos(ImVec2(window_locs["win_tools"].x, window_locs["win_tools"].y));
+  ImGui::SetNextWindowSize(ImVec2(window_sizes["win_tools"].x, window_sizes["win_tools"].y));
+
+  CoCadUI::WindowStart("Tools");
+  ImGui::Text("Selection Modes:");
+  
+  if (prev_selection_mode == COCAD_SELMODE_NONE) { ImGui::PushStyleColor(ImGuiCol_Text, accent_col); }
+  if (ImGui::Button(ICON_FA_EYE " None")) { Editor::SetSelectionMode(COCAD_SELMODE_NONE); }
+  if (prev_selection_mode == COCAD_SELMODE_NONE) { ImGui::PopStyleColor(); }
+  ImGui::SameLine();
+
+  if (prev_selection_mode == COCAD_SELMODE_FACE) { ImGui::PushStyleColor(ImGuiCol_Text, accent_col); }
+  if (ImGui::Button(ICON_FA_DICE_D6 " Face")) { Editor::SetSelectionMode(COCAD_SELMODE_FACE); }
+  if (prev_selection_mode == COCAD_SELMODE_FACE) { ImGui::PopStyleColor(); }
+  ImGui::SameLine();
+
+  if (prev_selection_mode == COCAD_SELMODE_EDGE) { ImGui::PushStyleColor(ImGuiCol_Text, accent_col); }
+  if (ImGui::Button(ICON_FA_CIRCLE_NODES " Edge")) { Editor::SetSelectionMode(COCAD_SELMODE_EDGE); }
+  if (prev_selection_mode == COCAD_SELMODE_EDGE) { ImGui::PopStyleColor(); }
+  ImGui::SameLine();
+
+  if (prev_selection_mode == COCAD_SELMODE_VERT) { ImGui::PushStyleColor(ImGuiCol_Text, accent_col); }
+  if (ImGui::Button(ICON_FA_XMARK " Vertex")) { Editor::SetSelectionMode(COCAD_SELMODE_VERT); }
+  if (prev_selection_mode == COCAD_SELMODE_VERT) { ImGui::PopStyleColor(); }
+
+  ImGui::Text("Mesh Operations:");
+  bool prev_move_mode = Editor::move_mode_active;
+  
+  if (ImGui::Button(ICON_FA_ROTATE_LEFT " Reset Mesh")) { 
+    Editor::GenerateRepr(mdl);
+    Editor::RecalculateMVD();
+  }
+  //ImGui::SameLine();
+
+  if (prev_move_mode) { ImGui::PushStyleColor(ImGuiCol_Text, accent_col); }
+  if (ImGui::Button(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT " Move Tool")) { 
+    if (Editor::GetSelectionMode() != COCAD_SELMODE_NONE) { Editor::move_mode_active = !Editor::move_mode_active; }
+  }
+  if (prev_move_mode) { ImGui::PopStyleColor(); }
+  ImGui::SameLine();
+
+  bool prev_axis_locked[3];
+  prev_axis_locked[0] = axis_locked[0];
+  prev_axis_locked[1] = axis_locked[1];
+  prev_axis_locked[2] = axis_locked[2];
+
+  if(prev_axis_locked[0] == true) { ImGui::PushStyleColor(ImGuiCol_Text, accent_col); }
+  if (ImGui::Button(ICON_FA_LOCK " X")) {
+    axis_locked[0] = true;
+    axis_locked[1] = false;
+    axis_locked[2] = false;
+  }
+  if(prev_axis_locked[0] == true) { ImGui::PopStyleColor(); }
+  ImGui::SameLine();
+
+  if(prev_axis_locked[1] == true) { ImGui::PushStyleColor(ImGuiCol_Text, accent_col); }
+  if (ImGui::Button(ICON_FA_LOCK " Y")) {
+    axis_locked[0] = false;
+    axis_locked[1] = true;
+    axis_locked[2] = false;
+  }
+  if(prev_axis_locked[1] == true) { ImGui::PopStyleColor(); }
+  ImGui::SameLine();
+
+  if(prev_axis_locked[2] == true) { ImGui::PushStyleColor(ImGuiCol_Text, accent_col); }
+  if (ImGui::Button(ICON_FA_LOCK " Z")) {
+    axis_locked[0] = false;
+    axis_locked[1] = false;
+    axis_locked[2] = true;
+  }
+  if(prev_axis_locked[2] == true) { ImGui::PopStyleColor(); }
   
   CoCadUI::WindowEnd();
 
@@ -396,6 +653,9 @@ void App::Render() {
     ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.50f);
     ImGui::SliderFloat(" Camera Sensitivity", &camera.sensitivity, 0.5f, 25.0f, "%.1f");
     ImGui::SliderFloat(" Light Intensity", &light_intensity, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat(" Vertex Display Size", &mvd_size, 0.001f, 0.1f, "%.3f");
+    ImGui::SliderFloat(" Selection Radius", &mvd_sel_radius_fact, 2.0f, 20.0f, "%.1f");
+    ImGui::SliderFloat(" Selection Distance", &Editor::med_sel_dist, 0.05f, 2.0f, "%.2f");
     ImGui::PopItemWidth();
   
     ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.45f);
@@ -404,31 +664,49 @@ void App::Render() {
     ImGui::InputInt(" Grid Size", &grid_size);
     grid_size = (int)MathUtil::Clamp((float)grid_size, 0.0f, 5000.0f);
     ImGui::PopItemWidth();
+
+    if (ImGui::Button("Reset Parameters")) {
+      light_intensity = 0.7f;
+      grid_size = 20;
+      grid_unit_size = 0.5f;
+      camera.sensitivity = 5.0f;
+      mvd_size = 0.01f;
+      mvd_sel_radius_fact = 8.0f;
+      Editor::med_sel_dist = 0.3f;
+
+      Editor::mdl_glb_rot[0] = 0;
+      Editor::mdl_glb_rot[1] = 0;
+      Editor::mdl_glb_rot[2] = 0;
+      Editor::mdl_glb_rot[3] = 0;
+     
+      Editor::mdl_glb_position[0] = 0.0f;
+      Editor::mdl_glb_position[1] = 0.0f;
+      Editor::mdl_glb_position[2] = 0.0f;
+      Editor::mdl_glb_position[3] = 0.0f;
+      
+      Editor::mdl_glb_scale[0] = 1.0f;
+      Editor::mdl_glb_scale[1] = 1.0f;
+      Editor::mdl_glb_scale[2] = 1.0f;
+      Editor::mdl_glb_scale[3] = 1.0f;
+    }
+
     ImGui::EndTabItem();
   }
 
   if (ImGui::BeginTabItem("Colors")) {
     
-    /* @TODO: Fix this - doesnt match color + crashes applications especially when in edit mode for some reason
-     * note: problem stems from config_data i believe, removing intermediate variables would probably solve the problem
-    */ // 02:00 Lukas Note - 17/04/2025
-    CoCadUI::PopColorPicker("Background Color", CoCadUI::GlmVec3ToImVec4(config_data["glb_bg"]));
-    ImVec4 bg_col_vec4 = CoCadUI::col_pop_pickers["Background Color"].color;
-    bg_col = glm::vec3(bg_col_vec4.x, bg_col_vec4.y, bg_col_vec4.z);
+    CoCadUI::PopColorPicker("Background Color", bg_col);
+    CoCadUI::PopColorPicker("Model Color", i_mdl_color);
+    CoCadUI::PopColorPicker("Not Selected Color", i_dvert_color);
+    CoCadUI::PopColorPicker("Selected Color", i_svert_color);
 
-    CoCadUI::PopColorPicker("Model Color", CoCadUI::GlmVec3ToImVec4(config_data["glb_mdl_color"]));
-    ImVec4 mdl_color = CoCadUI::col_pop_pickers["Model Color"].color;
-    glb_shader_3D.Use();
-    glb_shader_3D.setUVec3("v3_model_color", mdl_color);
 
-    CoCadUI::PopColorPicker("Vertex Color", CoCadUI::GlmVec3ToImVec4(config_data["edit_vert_desel"]));
-    ImVec4 vert_col = CoCadUI::col_pop_pickers["Vertex Color"].color;
-    Editor::repr.desel_color = glm::vec3(vert_col.x, vert_col.y, vert_col.z);
-
-    CoCadUI::PopColorPicker("Vertex Selected Color", ImVec4(config_data["edit_vert_sel"].x, config_data["edit_vert_sel"].y, config_data["edit_vert_sel"].z, 1.0f));
-    ImVec4 vert_sel_col = CoCadUI::col_pop_pickers["Vertex Selected Color"].color;
-    Editor::repr.sel_color = glm::vec3(vert_sel_col.x, vert_sel_col.y, vert_sel_col.z);
-    /**/
+    if (ImGui::Button("Reset Colors")) {
+      bg_col = CoCadUI::GlmVec3ToImVec4(config_data["glb_bg"]);
+      i_mdl_color = CoCadUI::GlmVec3ToImVec4(config_data["glb_mdl_color"]);
+      i_dvert_color = CoCadUI::GlmVec3ToImVec4(config_data["edit_vert_desel"]);
+      i_svert_color = CoCadUI::GlmVec3ToImVec4(config_data["edit_vert_sel"]);
+    }
 
     ImGui::EndTabItem();
   }
@@ -436,7 +714,8 @@ void App::Render() {
   ImGui::EndTabBar();
   ImGui::PopStyleVar();
   CoCadUI::WindowEnd();
-
+ 
+  // Chat Window
   ImGui::SetNextWindowPos(ImVec2(window_locs["win_chat"].x, window_locs["win_chat"].y));
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_chat"].x, window_sizes["win_chat"].y));
 
@@ -459,6 +738,26 @@ void App::Render() {
   ImGui::Text("Session ID: 027xf2");
   CoCadUI::WindowEnd();
 
+
+  // ================ // UI LOGIN OVERLOAD // =================//
+  ImGui::SetNextWindowPos(ImVec2(window_locs["win_login"].x, window_locs["win_login"].y));
+  ImGui::SetNextWindowSize(ImVec2(window_sizes["win_login"].x, window_sizes["win_login"].y));
+
+  if (logged_in == false) {
+    CoCadUI::WindowStart("Login");
+    
+    ImGui::Text("Enter Username: ");
+    CoCadUI::InputTextStdString("##loginusrn", &login_username); 
+    ImGui::Text("Enter Password: ");
+    CoCadUI::InputTextStdString("##loginpass", &login_password); 
+
+    if (ImGui::Button("Login")) {
+      cc_client.AuthenticateLogin(login_username, login_password);
+    }
+
+    CoCadUI::WindowEnd();
+  }
+  
   ImGui::PopFont();
 
   ImGui::Render();

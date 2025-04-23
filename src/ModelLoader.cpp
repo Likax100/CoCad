@@ -4,7 +4,7 @@
 // ============================================================= //
 //                    --- .OBJ Loader ---
 // ============================================================= //
-std::vector<int> OBJLoader::vertex_normal_index;
+std::vector<unsigned int> OBJLoader::vertex_normal_index;
 
 Model OBJLoader::LoadModel(const char* file_path) {
   Model mdl;
@@ -60,7 +60,8 @@ Model OBJLoader::LoadModel(const char* file_path) {
       mdl.attrib_vertices.push_back(mdl.unq_face_normals[(base_norm_index*3)+2]);
     }
 
-       // Clear any static variable data
+    // Clear any static variable data
+    mdl.vert_normals = OBJLoader::vertex_normal_index;
     OBJLoader::vertex_normal_index.clear();
 
     // Return Model object
@@ -96,16 +97,45 @@ Model STLLoader::LoadModel(const char* file_path) {
         curr_norm_x = std::stof(tokens[2]);
         curr_norm_y = std::stof(tokens[3]);
         curr_norm_z = std::stof(tokens[4]);
+        mdl.unq_face_normals.push_back(curr_norm_x);
+        mdl.unq_face_normals.push_back(curr_norm_y);
+        mdl.unq_face_normals.push_back(curr_norm_z);
       }
 
       else if (tokens[0] == "vertex") {
-        mdl.attrib_vertices.push_back(std::stof(tokens[1]));
-        mdl.attrib_vertices.push_back(std::stof(tokens[2]));
-        mdl.attrib_vertices.push_back(std::stof(tokens[3]));
-        
+        float tk0 = std::stof(tokens[1]);
+        float tk1 = std::stof(tokens[2]);
+        float tk2 = std::stof(tokens[3]);
+        mdl.attrib_vertices.push_back(tk0);
+        mdl.attrib_vertices.push_back(tk1);
+        mdl.attrib_vertices.push_back(tk2);
+       
+        // first check if vertex is in unq_vertices - if yes, add index, if not add vertex
+        bool exists = false;
+        for (auto uv = 0; uv < mdl.unq_vertices.size() / 3; uv++) {
+          float cx = mdl.unq_vertices[(3*uv)];
+          float cy = mdl.unq_vertices[(3*uv)+1];
+          float cz = mdl.unq_vertices[(3*uv)+2];
+
+          if (tk0 == cx && tk1 == cy && tk2 == cz) {
+            mdl.faces.push_back(uv); // vertex exists already so just add index
+            exists = true;
+            break;
+          }
+        }
+
+        if (exists == false) {
+          mdl.unq_vertices.push_back(tk0);
+          mdl.unq_vertices.push_back(tk1);
+          mdl.unq_vertices.push_back(tk2);
+          mdl.faces.push_back((mdl.unq_vertices.size() / 3) - 1);
+        }
+
         mdl.attrib_vertices.push_back(curr_norm_x);
         mdl.attrib_vertices.push_back(curr_norm_y);
         mdl.attrib_vertices.push_back(curr_norm_z);
+
+        mdl.vert_normals.push_back((mdl.unq_face_normals.size() / 3) - 1);
       }
     }
   

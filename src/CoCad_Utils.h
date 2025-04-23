@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <mutex>
+#include <deque>
 
 // --------- FILES ----------- //
 class FileUtil {
@@ -32,3 +34,5 @@ class MathUtil {
     static double Clamp(double x, double min, double max);
   private:
 };
+
+

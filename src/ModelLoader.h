@@ -19,6 +19,7 @@ class Model {
     std::vector<float> unq_vertices;
     std::vector<float> unq_face_normals;
     std::vector<unsigned int> faces;
+    std::vector<unsigned int> vert_normals;
 
     std::vector<float> attrib_vertices;
     
@@ -41,7 +42,7 @@ class OBJLoader {
     static Model LoadModel(const char* file_path);
 
   private:
-    static std::vector<int> vertex_normal_index;
+    static std::vector<unsigned int> vertex_normal_index;
 };
 
 class STLLoader {

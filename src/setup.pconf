@@ -4,7 +4,7 @@
 . glb_axcol_x 0.9 0.0 0.0
 . glb_axcol_y 0.0 0.9 0.0
 . glb_axcol_z 0.0 0.0 0.9 
-.r edit_vert_sel 52 242 46 
+.r edit_vert_sel 252 203 2 
 .r edit_vert_desel 242 242 242
 
 # - ui -
@@ -12,7 +12,7 @@
 .r glb_ui_text 246 246 246 
 .r glb_ui_primary 14 130 246
 .r glb_ui_secondary 36 36 36
-.r glb_ui_accent 52 242 46
+.r glb_ui_accent 252 203 2
 
 # - editor -
 

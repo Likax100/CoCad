@@ -2,8 +2,8 @@
 out vec4 frag_color;
 
 in vec3 inNormal;
+in vec3 inColor;
 
-uniform vec3 v3_model_color;
 uniform vec3 v3_light_origin;
 uniform float diffuse_intensity;
 
@@ -23,7 +23,7 @@ void main() {
   vec3 diffuse = diffuseStrength * lightColor;
 
   vec3 lighting = ambient + (diffuse_intensity * diffuse);
-  col = v3_model_color * lighting; 
+  col = inColor * lighting; 
 
   frag_color = vec4(col.rgb, 1.0); 
 }

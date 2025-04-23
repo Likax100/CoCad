@@ -72,3 +72,11 @@ double MathUtil::Clamp(double x, double min, double max) {
   else if (x >= max) { return max; }
   else { return x; }
 }
+
+// ========================== NET UTILS ============================= //
+
+
+
+
+
+
