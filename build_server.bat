@@ -1,1 +1,8 @@
 g++ -m64 -std=c++17 -I"C:\tools\msys64\mingw64\include" -I"C:\Users\lukas\OneDrive\Documents\GitHub\CoCad\include" -L"C:\tools\msys64\mingw64\lib" -o server.exe .\src\CoCad_Utils.cpp .\src\CoCad_Server.cpp -g -lpthread -lws2_32 -lmswsock
+
+
+
+
+
+
+

@@ -54,6 +54,7 @@ class Editor {
     static void SetUpMVD();
     static void RecalculateMVD();
     static void SetUpMED();
+    static void ClearRepr();
    
     static void RecalculateNormals();
     static void CastRay(float mouse_x, float mouse_y, glm::mat4& view_mat, glm::mat4& proj_mat);

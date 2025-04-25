@@ -369,10 +369,12 @@ void App::KeyboardInput(int key, int scancode, int action, int mods) {
 // ============================================================= //
 //                    --- UPDATE LOOP ---
 // ============================================================= //
+// @proc
 void App::ProcessClient() {
   if (cc_client.is_connected()) {
     if (!cc_client.get_incoming_queue().empty()) {
       auto m = cc_client.get_incoming_queue().pop_front().m;
+      auto packet_data = StringUtil::SplitString(m.dat, " ");
 
       switch (m.head.ID) {
         case MessageTypes::ServerAccept:
@@ -384,17 +386,100 @@ void App::ProcessClient() {
           break;
 
         case MessageTypes::ccAuthenticationOutcome: {
-          if (m.dat[0] == "1") {
+          if (packet_data[0] == "1") {
             logged_in = true;
             user.username = login_username;
             user.pass = login_password;
-            user.client_ID = std::stoi(m.dat[1]);
+            user.client_ID = std::stoi(packet_data[1]);
             user.is_host = false;
+
+            sesh_info.currently_in_session = false;
+            sesh_info.session_host = -1;
           }
-          std::string outc = m.dat[0] == "1" ? "Success" : "Failure";
+          std::string outc = packet_data[0] == "1" ? "Success" : "Failure";
           std::cout << "[SERVER-RESPONSE] Authentication Outcome " << outc << "\n";
         } break;
+
+        case MessageTypes::ccStatusHostExists: {
+          if (packet_data[0] == "1") {
+            sesh_info.host_exists = true;
+            sesh_info.session_host = std::stoi(packet_data[1]);
+          } else {
+            sesh_info.host_exists = false;
+            sesh_info.session_host = -1;
+          }
+        } break;
       
+        case MessageTypes::ccSessionHostRequestOutcome: {
+          if (packet_data[0] == "1") { user.is_host = true; }
+          else { user.is_host = false; }
+        } break;
+
+        case MessageTypes::ccRequestJoinSessionOutcome: {
+          if (packet_data[0] == "1") { sesh_info.currently_in_session = true; }
+        } break;
+
+        case MessageTypes::ccOpRequestSHModelData: {
+          if (std::stoi(packet_data[0]) == user.client_ID) {
+            // generate and send repr data to all clients - safe
+            CoCadNet::msg<MessageTypes> repr_dat;
+            repr_dat.head.ID = MessageTypes::ccOpSHSentModelData;
+             
+            repr_dat.dat = "ogvc";
+            for (int ogvc_i = 0; ogvc_i < Editor::repr.og_vert_cpy.size(); ogvc_i++) { 
+              repr_dat.dat += " " + std::to_string(Editor::repr.og_vert_cpy[ogvc_i]); 
+            }
+            
+            repr_dat.dat += "\nuv";
+            for (int uv_i = 0; uv_i < Editor::repr.unique_verts.size(); uv_i++) { 
+              repr_dat.dat += " " + std::to_string(Editor::repr.unique_verts[uv_i]); 
+            }
+            
+            repr_dat.dat += "\nufn";
+            for (int ufn_i = 0; ufn_i < Editor::repr.unique_face_normals.size(); ufn_i++) { 
+              repr_dat.dat += " " + std::to_string(Editor::repr.unique_face_normals[ufn_i]); 
+            }
+            
+            repr_dat.dat += "\nfi";
+            for (int fi_i = 0; fi_i < Editor::repr.face_indices.size(); fi_i++) { 
+              repr_dat.dat += " " + std::to_string(Editor::repr.face_indices[fi_i]); 
+            }
+            
+            repr_dat.dat += "\nnr";
+            for (int nr_i = 0; nr_i < Editor::repr.normals_redundant.size(); nr_i++) { 
+              repr_dat.dat += " " + std::to_string(Editor::repr.normals_redundant[nr_i]); 
+            }
+            
+            cc_client.send_msg(repr_dat);
+          }
+        } break;
+
+        case MessageTypes::ccOpSHSentModelData: {
+          Editor::ClearRepr();
+          auto repr_data = StringUtil::SplitString(m.dat, "\n");
+
+          for (auto line: repr_data) {
+            auto l_data = StringUtil::SplitString(line, " ");
+
+            if (l_data[0] == "ogvc") {
+              for (unsigned int el = 1; el < l_data.size(); el++) { Editor::repr.og_vert_cpy.push_back(std::stof(l_data[el])); }
+            } else if (l_data[0] == "uv") {
+              for (unsigned int el2 = 1; el2 < l_data.size(); el2++) { Editor::repr.unique_verts.push_back(std::stof(l_data[el2])); }
+            } else if (l_data[0] == "ufn") {
+              for (unsigned int el3 = 1; el3 < l_data.size(); el3++) { Editor::repr.unique_face_normals.push_back(std::stof(l_data[el3])); }
+            } else if (l_data[0] == "fi") {
+              for (unsigned int el4 = 1; el4 < l_data.size(); el4++) { Editor::repr.face_indices.push_back(static_cast<unsigned int>(std::stoul(l_data[el4])) ); }
+            } else if (l_data[0] == "nr") {
+              for (unsigned int el5 = 1; el5 < l_data.size(); el5++) { Editor::repr.normals_redundant.push_back(static_cast<unsigned int>(std::stoul(l_data[el5])) ); }
+            }
+          }
+          
+          Editor::instance_data_updated = true;
+          Editor::instance_color_updated = true;
+          Editor::edge_data_updated = true;
+
+          // call recalculation editor funcs
+        } break;
       }
 
     }
@@ -719,23 +804,41 @@ void App::Render() {
   ImGui::SetNextWindowPos(ImVec2(window_locs["win_chat"].x, window_locs["win_chat"].y));
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_chat"].x, window_sizes["win_chat"].y));
 
-  CoCadUI::WindowStart("Chat");
-  ImGui::Text("[User 1]: Hello, how is the project going?");
-  ImGui::Text("[User 2]: Hi! its going okay :)");
+  CoCadUI::WindowStart(ICON_FA_MESSAGE " Chat");
+
   CoCadUI::WindowEnd();
  
   ImGui::SetNextWindowPos(ImVec2(window_locs["win_sesh"].x, window_locs["win_sesh"].y));
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_sesh"].x, window_sizes["win_sesh"].y));
 
   CoCadUI::WindowStart("Session Settings");
-  if (ImGui::Button("Host Session")) {
-    std::cout << "[DEBUG] Hosting session...";
-  }
+
+  if (sesh_info.host_exists == false) {
+    if (ImGui::Button("Host Session")) { cc_client.RequestBecomeSH(); }
+    
+    if (ImGui::Button("End Session")) {
   
-  if (ImGui::Button("End Session")) {
-    std::cout << "[DEBUG] Ending Session..";
+    }
+  } else {
+    if (ImGui::Button("Join Session")) {
+      cc_client.RequestJoinSH(); 
+    }
+    
+    if (sesh_info.currently_in_session) {
+      if (ImGui::Button("Leave Session")) {
+        
+      }
+    }
   }
-  ImGui::Text("Session ID: 027xf2");
+
+  std::string sesh_status_info = "Session Status: ";
+  std::string type = user.is_host ? "(Hosting)" : "(Connected)";
+  std::string cs = sesh_info.currently_in_session ? "Running" : "Waiting"; 
+  sesh_status_info = sesh_status_info + cs + " " + type;
+
+  ImGui::Text(sesh_status_info.c_str());
+  ImGui::Text("Hosted By: ");
+
   CoCadUI::WindowEnd();
 
 

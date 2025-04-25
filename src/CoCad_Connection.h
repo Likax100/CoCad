@@ -62,7 +62,21 @@ namespace CoCadNet
 
 	private:
 		// main important async methods
-		void prime_header() { // tell context to write header
+		/*void prime_header() { // tell context to write header
+			asio::async_write(c_socket, asio::buffer(&c_msgs_out.front().head, sizeof(CoCadNet::msg_head<T>)),
+				[this](std::error_code ec, std::size_t length) {
+					if (!ec) {
+						// written and sent message - success! check if it also has some data
+						if (c_msgs_out.front().dat.size() > 0) { prime_body(); }
+						else {
+							c_msgs_out.pop_front(); // remove it cuz we finished processing
+							if (!c_msgs_out.empty()) { prime_header(); } // if queue not empty we have more processing to do
+						}
+					} else { std::cout << "ERROR-[CONNECTION:" << ID << "] Could not write header.\n"; c_socket.close(); }
+			});
+		}*/
+
+    void prime_header() { // tell context to write header
 			asio::async_write(c_socket, asio::buffer(&c_msgs_out.front().head, sizeof(CoCadNet::msg_head<T>)),
 				[this](std::error_code ec, std::size_t length) {
 					if (!ec) {
@@ -76,13 +90,25 @@ namespace CoCadNet
 			});
 		}
 
-		void prime_body() {
+		/*void prime_body() {
 			asio::async_write(c_socket, asio::buffer(c_msgs_out.front().dat.data(), c_msgs_out.front().dat.size()),
 				[this](std::error_code ec, std::size_t length) {
 					if (!ec) {
 						// if able to write data, full packet done and successful - remove from queue
 						c_msgs_out.pop_front();
-            std::cout << "Written " << length << " Bytes to buffer\n";
+            std::cout << "Written " << length << " Bytes to buffer\n";  
+						if (!c_msgs_out.empty()) { prime_header(); } // give asio more work if not empty
+					} else { std::cout << "ERROR-[CONNECTION:" << ID << "] Could not write body.\n"; c_socket.close(); }
+				});
+		}*/		
+
+    void prime_body() {
+			asio::async_write(c_socket, asio::buffer(c_msgs_out.front().dat),
+				[this](std::error_code ec, std::size_t length) {
+					if (!ec) {
+						// if able to write data, full packet done and successful - remove from queue
+						c_msgs_out.pop_front();
+            //std::cout << "Written " << length << " Bytes to buffer\n";  
 						if (!c_msgs_out.empty()) { prime_header(); } // give asio more work if not empty
 					} else { std::cout << "ERROR-[CONNECTION:" << ID << "] Could not write body.\n"; c_socket.close(); }
 				});
@@ -100,8 +126,16 @@ namespace CoCadNet
 			});
 		}
 
+    /*void process_body() {
+			asio::async_read(c_socket, asio::buffer(c_temp_msg_received.dat, c_temp_msg_received.dat.size()),
+				[this](std::error_code ec, std::size_t length) {						
+					if (!ec) { add_to_incoming_messages(); } // packet had data and data packets arrived so add to incoming messages
+					else { std::cout << "ERROR-[CONNECTION:" << ID << "] Could not read header of message packet.\n"; c_socket.close(); }
+			});
+		}*/
+
 		void process_body() {
-			asio::async_read(c_socket, asio::buffer(c_temp_msg_received.dat.data(), c_temp_msg_received.dat.size()),
+			asio::async_read(c_socket, asio::buffer(c_temp_msg_received.dat),
 				[this](std::error_code ec, std::size_t length) {						
 					if (!ec) { add_to_incoming_messages(); } // packet had data and data packets arrived so add to incoming messages
 					else { std::cout << "ERROR-[CONNECTION:" << ID << "] Could not read header of message packet.\n"; c_socket.close(); }

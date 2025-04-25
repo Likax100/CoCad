@@ -49,25 +49,60 @@ class CoCadServer : public CoCadNet::i_Server<MessageTypes> {
           CoCadNet::msg<MessageTypes> result;
           result.head.ID = MessageTypes::ccAuthenticationOutcome;
           
-          bool success = false; 
+          bool success = false;
+          auto packet_data = StringUtil::SplitString(m.dat, " ");
+
           if (is_usr_data_loaded) {
-            std::cout << "Checking For: " << m.dat[0] << " " << m.dat[1] << "\n";
-            if (usr_acc_data.count(m.dat[0]) > 0) {
+            if (usr_acc_data.count(packet_data[0]) > 0) {
               // check if passwords match
-              std::cout << "Checking..";
-              if (m.dat[1] == usr_acc_data[m.dat[0]]) { success = true; }
+              if (packet_data[1] == usr_acc_data[packet_data[0]]) { success = true; }
             }
           }
 
           std::string res_val = success ? "1" : "0";
           std::string cl_id = std::to_string(client->get_id());
 
-          result.dat.push_back(res_val);
-          result.dat.push_back(cl_id);
+          result.dat = res_val + " " + cl_id;
           result.head.size = result.dat.size();
           std::cout << "STATUS-[SERVER] Authentication Request: CLIENT[" << cl_id << "] = " << res_val << "\n";
           client->send_msg(result);
-        }
+        } break;
+
+        case MessageTypes::ccRequestSessionHost: {
+          CoCadNet::msg<MessageTypes> outcome;
+          CoCadNet::msg<MessageTypes> host_status;
+          outcome.head.ID = MessageTypes::ccSessionHostRequestOutcome;
+          host_status.head.ID = MessageTypes::ccStatusHostExists;
+
+          if (!session_host_set) {
+            session_host = client->get_id();
+            session_host_set = true;
+            outcome.dat = "1";
+          } 
+
+          outcome.dat = "0";
+          host_status.dat = "1 " + std::to_string(client->get_id());
+          client->send_msg(outcome);
+          broadcast_msg(host_status, client);
+        } break;
+
+        case MessageTypes::ccRequestJoinSession: {
+          CoCadNet::msg<MessageTypes> req_response;
+          req_response.head.ID = MessageTypes::ccRequestJoinSessionOutcome;
+          std::string val = session_host_set ? "1" : "0";
+          req_response.dat = val;
+
+          CoCadNet::msg<MessageTypes> req_sh_mdl_data;
+          req_sh_mdl_data.head.ID = MessageTypes::ccOpRequestSHModelData;
+          req_sh_mdl_data.dat = std::to_string(session_host); 
+
+          client->send_msg(req_response);
+          broadcast_msg(req_sh_mdl_data);
+        } break;
+
+        case MessageTypes::ccOpSHSentModelData: {
+          broadcast_msg(m, client); 
+        } break;
 
 				/*
 				case MessageTypes::MessageAll: {
@@ -84,7 +119,8 @@ class CoCadServer : public CoCadNet::i_Server<MessageTypes> {
   private:
     std::map<std::string, std::string> usr_acc_data;
     bool is_usr_data_loaded = false;
-    std::map<unsigned int, std::string> hosting_users;
+    unsigned int session_host;
+    bool session_host_set = false;
 };
 
 int main()

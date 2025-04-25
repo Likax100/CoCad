@@ -11,7 +11,7 @@ namespace CoCadNet
 	template <typename T>
 	struct msg {
 		msg_head<T> head { };
-		std::vector<std::string> dat; // consider std::vector<std::string> ?
+		std::string dat; // consider std::vector<std::string> ?
 
 		unsigned int size() const { return dat.size(); }
 	};

@@ -960,4 +960,12 @@ void Editor::RenderEdgeOverlay(Shader& sh) {
   glBindVertexArray(0);
 }
 
+void Editor::ClearRepr() {
+  Editor::repr.og_vert_cpy.clear();
+  Editor::repr.unique_verts.clear();
+  Editor::repr.unique_face_normals.clear();
+  Editor::repr.face_indices.clear();
+  Editor::repr.normals_redundant.clear();
+}
+
 void Editor::PassModKeyControl(bool state) { Editor::control_key_state = state; }

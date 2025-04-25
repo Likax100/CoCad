@@ -9,4 +9,14 @@ enum class MessageTypes : unsigned int {
  
   ccRequestAuthentication,
   ccAuthenticationOutcome,
+
+  ccRequestSessionHost,
+  ccStatusHostExists,
+  ccSessionHostRequestOutcome,
+  ccRequestJoinSession,
+  ccRequestJoinSessionOutcome,
+
+  ccOpRequestSHModelData,
+  ccOpSHSentModelData,
+
 };

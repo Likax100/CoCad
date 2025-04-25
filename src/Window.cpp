@@ -25,14 +25,11 @@ Window::Window(int window_width, int window_height, const char* window_title) {
   p_smoothing_factor = 0.2f;
 
   if (!glfwInit()) {
-    //std::cerr << "ERROR-[WINDOW::WINDOW] Failed to Initialize GLFW " << glfwGetVersionString() << std::endl;   
-    //return -1
     std::string error_msg = "ERROR-[WINDOW::Window] Failed to Initialize GLFW";
     error_msg.append(glfwGetVersionString());
     throw std::runtime_error(error_msg.c_str());
   }
 
-  //TODO: make this more modular, some state/options machine??
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -41,10 +38,8 @@ Window::Window(int window_width, int window_height, const char* window_title) {
 
   window = glfwCreateWindow(window_width, window_height, window_title, NULL, NULL);
   if (!window) {
-    //std::cerr << "ERROR-[WINDOW::WINDOW] Failed to Create GLFW Window Context" << std::endl;
     glfwTerminate();
     throw std::runtime_error("ERROR-[WINDOW::Window] Failed to Create GLFW Window Context");
-    //return -1
   } 
   glfwMakeContextCurrent(window);
 
@@ -57,15 +52,8 @@ Window::Window(int window_width, int window_height, const char* window_title) {
 
   //Load GLAD - TODO: add version to error string
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-    //std::cerr << "ERROR-[WINDOW::WINDOW] Failed to Initialize GLAD" << std::endl;
-    //return -1;
     throw std::runtime_error("ERROR-[WINDOW::Window] Failed to Initialize GLAD");
   }
-  
-  //NOTE: Not needed anymore????
-  //Set up glViewport to match SCALE_TO_MONITOR and FrameBuffer
-  //glfwGetFramebufferSize(window, &w_width, &w_height);
-  //glViewport(0, 0, w_width, w_height);
 
   glfwSetFramebufferSizeCallback(this->window, &Window::p_FrameBufferSizeCB);
   

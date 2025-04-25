@@ -25,6 +25,16 @@ typedef struct {
   bool is_host;
 } User;
 
+typedef struct {
+  std::string user;
+  std::string content;
+} ChatMessage;
+
+typedef struct {
+  bool currently_in_session;
+  int session_host;
+  bool host_exists;
+} SessionInfo;
 
 class App : public Window {
   
@@ -64,6 +74,7 @@ class App : public Window {
   // networking stuff 
   CoCadClient cc_client;
   User user;
+  SessionInfo sesh_info;
 
   // shader and rendering vars
   Shader glb_shader_3D;
@@ -115,5 +126,9 @@ class App : public Window {
   std::string login_username;
   std::string login_password;
   bool logged_in = false;
+  bool model_loaded = false;
+  bool chat_enabled = false;
+ 
+  // keep track of messages here?
 
 }; 
