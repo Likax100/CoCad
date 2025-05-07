@@ -19,15 +19,25 @@ class CoCadClient : public CoCadNet::i_Client<MessageTypes> {
       send_msg(m);
     }
 
-    void RequestBecomeSH() {
+    void RequestBecomeSH(std::string name) {
       CoCadNet::msg<MessageTypes> m;
       m.head.ID = MessageTypes::ccRequestSessionHost;
+      m.dat = name;
+      m.head.size = m.dat.size();
       send_msg(m);
     }
 
-    void RequestJoinSH() {
+    void RequestJoinSH(std::string key) {
       CoCadNet::msg<MessageTypes> m;
       m.head.ID = MessageTypes::ccRequestJoinSession;
+      m.dat = key;
+      m.head.size = m.dat.size();
+      send_msg(m);
+    }
+
+    void RequestEditorRepr() {
+      CoCadNet::msg<MessageTypes> m;
+      m.head.ID = MessageTypes::ccOpRequestSHModelData;
       send_msg(m);
     }
 };

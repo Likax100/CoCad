@@ -53,6 +53,7 @@ class Editor {
     static void GenerateRepr(Model& mdl); 
     static void SetUpMVD();
     static void RecalculateMVD();
+    static void RecalculateMED();
     static void SetUpMED();
     static void ClearRepr();
    
