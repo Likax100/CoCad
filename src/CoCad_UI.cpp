@@ -2,8 +2,10 @@
 
 namespace CoCadUI {
 
-  void WindowStart(const char* window_name) {
-    ImGui::Begin(window_name, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+  void WindowStart(const char* window_name, bool title_bar) {
+    unsigned int flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse;
+    if (!title_bar) { flags |= ImGuiWindowFlags_NoTitleBar; }
+    ImGui::Begin(window_name, nullptr, flags);
   }
 
   void WindowEnd() { ImGui::End(); }

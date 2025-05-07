@@ -13,10 +13,13 @@ enum class MessageTypes : unsigned int {
   ccRequestSessionHost,
   ccStatusHostExists,
   ccSessionHostRequestOutcome,
+  ccCurrentHostList,
+
   ccRequestJoinSession,
-  ccRequestJoinSessionOutcome,
+  ccJoinSessionOutcome,
 
   ccOpRequestSHModelData,
   ccOpSHSentModelData,
+  ccOpBroadcastModelChange,
 
 };

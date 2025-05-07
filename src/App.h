@@ -1,6 +1,5 @@
 #pragma once
 #include "Window.h"
-//#include "SpriteRenderer.h"
 #include "ResourceManager.h"
 #include "CoCad_Colors.h"
 #include "ModelLoader.h"
@@ -14,6 +13,7 @@
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
 #include "imgui/imgui_impl_opengl3_loader.h"
+#include "ImFileDialog.h"
 #include "IconsFA.h"
 
 #define GLFW_MOD_NONE 0
@@ -33,8 +33,13 @@ typedef struct {
 typedef struct {
   bool currently_in_session;
   int session_host;
-  bool host_exists;
+  std::string host_name;
 } SessionInfo;
+
+typedef struct {
+  std::string host_name;
+  std::string session_key;
+} Host;
 
 class App : public Window {
   
@@ -108,6 +113,7 @@ class App : public Window {
   ImGuiStyle* imgui_style;
   ImFont* im_font_main;
   ImFont* im_font_icon;
+  ImFont* im_font_main_lsz;
   std::map<std::string, glm::vec2> window_locs;
   std::map<std::string, glm::vec2> window_sizes;
   ImVec4 bg_col;
@@ -115,6 +121,8 @@ class App : public Window {
   ImVec4 i_mdl_color;
   ImVec4 i_dvert_color;
   ImVec4 i_svert_color;
+  Texture2D logo_tex;
+  ImDrawList* internal_draw_list;
 
   // operational vars
   double start_loc_x, start_loc_y;
@@ -122,12 +130,16 @@ class App : public Window {
   bool axis_locked[3] = {true, false, false}; 
 
   Model mdl;
-  std::string mdl_path;
+  std::string mdl_path = "./assets/models/cube.obj";
   std::string login_username;
   std::string login_password;
+  std::string login_session_id;
   bool logged_in = false;
   bool model_loaded = false;
   bool chat_enabled = false;
+  bool load_new_model = false;
+
+  std::map<int, Host> hosted_sessions;
  
   // keep track of messages here?
 

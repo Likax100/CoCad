@@ -9,6 +9,8 @@
 #include "imgui/imgui_internal.h"
 #include <glm/glm.hpp>
 
+#define ImGuiChildFlags_None 0
+
 namespace CoCadUI {
 
   //############################ VARS ##############################//
@@ -20,7 +22,7 @@ namespace CoCadUI {
   static std::map<std::string, ui_ColPickerDat> col_pop_pickers;
 
   //############################ FUNCS ##############################//
-  void WindowStart(const char* window_name);
+  void WindowStart(const char* window_name, bool title_bar = true);
   void WindowEnd();
   void WindowFocusBorderSet(ImVec4 focus_color, ImVec4 default_color);
   void WindowFocusBorderEnd();

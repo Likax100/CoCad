@@ -60,6 +60,9 @@ void App::SetupImGuiStyle() {
   im_font_icon = imgui_io->Fonts->AddFontFromFileTTF("./assets/fonts/Font Awesome 6 Solid-900.otf", 28.0f, &config, icon_ranges);
   IM_ASSERT(im_font_icon != NULL);
 
+  im_font_main_lsz = imgui_io->Fonts->AddFontFromFileTTF("./assets/fonts/Roboto-VariableFont.ttf", 40.0f);
+  IM_ASSERT(im_font_main_lsz != NULL);
+  
   // convert .pconf file global ui colors into ImGui compatible vectors
   ImVec4 cocad_ui_bg = ImVec4(config_data["glb_ui_bg"].x, config_data["glb_ui_bg"].y, config_data["glb_ui_bg"].z, 1.0f);
   ImVec4 cocad_ui_text = ImVec4(config_data["glb_ui_text"].x, config_data["glb_ui_text"].y, config_data["glb_ui_text"].z, 1.0f);
@@ -87,7 +90,6 @@ void App::SetupImGuiStyle() {
   imgui_style->Colors[ImGuiCol_Button] = cocad_ui_secondary;
   imgui_style->Colors[ImGuiCol_ButtonHovered] = cocad_ui_secondary;
   imgui_style->Colors[ImGuiCol_ButtonActive] = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
-
 }
 
 void App::SetupGrid(bool regen) {
@@ -228,6 +230,28 @@ void App::InitWindow() {
   this->SetupImGuiStyle();
   this->AdjustScalingFromDPI();
 
+  // ImFileDialog Set Up
+  ifd::FileDialog::Instance().CreateTexture = [](uint8_t* data, int w, int h, char fmt) -> void* {
+		GLuint tex;
+
+		glGenTextures(1, &tex);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, (fmt == 0) ? GL_BGRA : GL_RGBA, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		return (void*)tex;
+	};
+	
+  ifd::FileDialog::Instance().DeleteTexture = [](void* tex) {
+		GLuint texID = (GLuint)((uintptr_t)tex);
+		glDeleteTextures(1, &texID);
+	};
+
   // Login Window
   window_sizes["win_login"] = glm::vec2(fb_width, fb_height);
   window_locs["win_login"] = glm::vec2(0.0f, 0.0f);
@@ -250,7 +274,7 @@ void App::InitWindow() {
 
   // Loading and Setting Up Model
   // load default cube if no model selected
-  mdl = OBJLoader::LoadModel("./assets/models/cube.obj"); 
+  mdl = OBJLoader::LoadModel("./assets/models/monke.obj"); 
   
   Editor::r_repr.mdl_color = config_data["glb_mdl_color"];
   Editor::repr.sel_color = config_data["edit_vert_sel"];
@@ -270,6 +294,7 @@ void App::InitWindow() {
   i_dvert_color = CoCadUI::GlmVec3ToImVec4(config_data["edit_vert_desel"]);
   i_svert_color = CoCadUI::GlmVec3ToImVec4(config_data["edit_vert_sel"]);
   accent_col = CoCadUI::GlmVec3ToImVec4(config_data["glb_ui_accent"]);
+  logo_tex = Texture2D("./assets/icons/COCAD_logo.png");
 
   this->SetupGrid();
   this->LimitFPS(true, 60);
@@ -400,14 +425,30 @@ void App::ProcessClient() {
           std::cout << "[SERVER-RESPONSE] Authentication Outcome " << outc << "\n";
         } break;
 
-        case MessageTypes::ccStatusHostExists: {
-          if (packet_data[0] == "1") {
-            sesh_info.host_exists = true;
-            sesh_info.session_host = std::stoi(packet_data[1]);
-          } else {
-            sesh_info.host_exists = false;
-            sesh_info.session_host = -1;
+        case MessageTypes::ccCurrentHostList: {
+          for (unsigned int i = 0; i < packet_data.size() / 3; i++) {
+            int idx = i*3;
+            Host h;
+            h.host_name = packet_data[idx+1];
+            h.session_key = packet_data[idx+2];
+            hosted_sessions[std::stoi(packet_data[idx])] = h;
           }
+        } break;
+
+        case MessageTypes::ccJoinSessionOutcome: {
+          if (packet_data[0] == "1") {
+            sesh_info.session_host = std::stoi(packet_data[1]);
+            sesh_info.host_name = packet_data[2];
+            sesh_info.currently_in_session = true;
+            cc_client.RequestEditorRepr(); 
+          }
+        } break;
+
+        case MessageTypes::ccStatusHostExists: {
+          Host h;
+          h.host_name = packet_data[1];
+          h.session_key = packet_data[2];
+          hosted_sessions[std::stoi(packet_data[0])] = h;
         } break;
       
         case MessageTypes::ccSessionHostRequestOutcome: {
@@ -415,17 +456,15 @@ void App::ProcessClient() {
           else { user.is_host = false; }
         } break;
 
-        case MessageTypes::ccRequestJoinSessionOutcome: {
-          if (packet_data[0] == "1") { sesh_info.currently_in_session = true; }
-        } break;
-
         case MessageTypes::ccOpRequestSHModelData: {
-          if (std::stoi(packet_data[0]) == user.client_ID) {
+          if (m.head.size > 0 && std::stoi(packet_data[0]) == user.client_ID) {
             // generate and send repr data to all clients - safe
             CoCadNet::msg<MessageTypes> repr_dat;
             repr_dat.head.ID = MessageTypes::ccOpSHSentModelData;
-             
-            repr_dat.dat = "ogvc";
+            
+            repr_dat.dat = packet_data[1];
+
+            repr_dat.dat += "\nogvc";
             for (int ogvc_i = 0; ogvc_i < Editor::repr.og_vert_cpy.size(); ogvc_i++) { 
               repr_dat.dat += " " + std::to_string(Editor::repr.og_vert_cpy[ogvc_i]); 
             }
@@ -455,31 +494,42 @@ void App::ProcessClient() {
         } break;
 
         case MessageTypes::ccOpSHSentModelData: {
-          Editor::ClearRepr();
           auto repr_data = StringUtil::SplitString(m.dat, "\n");
-
-          for (auto line: repr_data) {
-            auto l_data = StringUtil::SplitString(line, " ");
-
-            if (l_data[0] == "ogvc") {
-              for (unsigned int el = 1; el < l_data.size(); el++) { Editor::repr.og_vert_cpy.push_back(std::stof(l_data[el])); }
-            } else if (l_data[0] == "uv") {
-              for (unsigned int el2 = 1; el2 < l_data.size(); el2++) { Editor::repr.unique_verts.push_back(std::stof(l_data[el2])); }
-            } else if (l_data[0] == "ufn") {
-              for (unsigned int el3 = 1; el3 < l_data.size(); el3++) { Editor::repr.unique_face_normals.push_back(std::stof(l_data[el3])); }
-            } else if (l_data[0] == "fi") {
-              for (unsigned int el4 = 1; el4 < l_data.size(); el4++) { Editor::repr.face_indices.push_back(static_cast<unsigned int>(std::stoul(l_data[el4])) ); }
-            } else if (l_data[0] == "nr") {
-              for (unsigned int el5 = 1; el5 < l_data.size(); el5++) { Editor::repr.normals_redundant.push_back(static_cast<unsigned int>(std::stoul(l_data[el5])) ); }
-            }
-          }
           
-          Editor::instance_data_updated = true;
-          Editor::instance_color_updated = true;
-          Editor::edge_data_updated = true;
+          if (repr_data[0] == std::to_string(user.client_ID)) {
+            Editor::ClearRepr();
+          
+            for (auto line: repr_data) {
+              auto l_data = StringUtil::SplitString(line, " ");
 
-          // call recalculation editor funcs
-        } break;
+              if (l_data[0] == "ogvc") {
+                for (unsigned int el = 1; el < l_data.size(); el++) { Editor::repr.og_vert_cpy.push_back(std::stof(l_data[el])); }
+              } else if (l_data[0] == "uv") {
+                for (unsigned int el2 = 1; el2 < l_data.size(); el2++) { Editor::repr.unique_verts.push_back(std::stof(l_data[el2])); }
+              } else if (l_data[0] == "ufn") {
+                for (unsigned int el3 = 1; el3 < l_data.size(); el3++) { Editor::repr.unique_face_normals.push_back(std::stof(l_data[el3])); }
+              } else if (l_data[0] == "fi") {
+                for (unsigned int el4 = 1; el4 < l_data.size(); el4++) { Editor::repr.face_indices.push_back(static_cast<unsigned int>(std::stoul(l_data[el4])) ); }
+              } else if (l_data[0] == "nr") {
+                for (unsigned int el5 = 1; el5 < l_data.size(); el5++) { Editor::repr.normals_redundant.push_back(static_cast<unsigned int>(std::stoul(l_data[el5])) ); }
+              }
+            }
+          
+            Editor::instance_data_updated = true;
+            Editor::instance_color_updated = true;
+            Editor::edge_data_updated = true;
+
+            // call recalculation editor funcs
+            Editor::RecalculateMVD();
+            Editor::RecalculateMED();
+          }
+       } break;
+
+       case MessageTypes::ccOpBroadcastModelChange: {
+         int count = std::count(packet_data.begin(), packet_data.end(), std::to_string(user.client_ID));
+         if (count > 0) { cc_client.RequestEditorRepr(); }
+       } break;
+
       }
 
     }
@@ -488,6 +538,27 @@ void App::ProcessClient() {
 
 void App::Update() {
   ProcessClient();
+
+  // model loading stuff
+  if (load_new_model) {
+    Editor::ClearRepr();
+    
+    if (FileUtil::MatchesExt(mdl_path.c_str(), ".obj")) {
+      mdl = OBJLoader::LoadModel(mdl_path.c_str()); 
+    } else if (FileUtil::MatchesExt(mdl_path.c_str(), ".stl")) {
+      mdl = STLLoader::LoadModel(mdl_path.c_str());
+    }
+
+    Editor::GenerateRepr(mdl);
+    Editor::RecalculateMVD();
+    Editor::RecalculateMED();
+    
+    CoCadNet::msg<MessageTypes> broad_model;
+    broad_model.head.ID = MessageTypes::ccOpBroadcastModelChange;
+    cc_client.send_msg(broad_model);
+
+    load_new_model = false;
+  }
 
   // -- set global editor selected verts set
   Editor::sel_unique_verts.clear();
@@ -811,53 +882,138 @@ void App::Render() {
   ImGui::SetNextWindowPos(ImVec2(window_locs["win_sesh"].x, window_locs["win_sesh"].y));
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_sesh"].x, window_sizes["win_sesh"].y));
 
-  CoCadUI::WindowStart("Session Settings");
-
-  if (sesh_info.host_exists == false) {
-    if (ImGui::Button("Host Session")) { cc_client.RequestBecomeSH(); }
-    
-    if (ImGui::Button("End Session")) {
-  
-    }
-  } else {
-    if (ImGui::Button("Join Session")) {
-      cc_client.RequestJoinSH(); 
-    }
-    
-    if (sesh_info.currently_in_session) {
-      if (ImGui::Button("Leave Session")) {
-        
-      }
-    }
-  }
+  CoCadUI::WindowStart("Session Info");
 
   std::string sesh_status_info = "Session Status: ";
-  std::string type = user.is_host ? "(Hosting)" : "(Connected)";
+  std::string type = user.is_host ? "(Hosting)" : "(Connected to " + std::to_string(sesh_info.session_host) + ")";
   std::string cs = sesh_info.currently_in_session ? "Running" : "Waiting"; 
   sesh_status_info = sesh_status_info + cs + " " + type;
 
   ImGui::Text(sesh_status_info.c_str());
-  ImGui::Text("Hosted By: ");
+  std::string hname = "Hosted By: " + sesh_info.host_name;
+  ImGui::Text(hname.c_str());
+  
+  if (user.is_host) {
+    if (ImGui::Button("Load Model")) {
+      ifd::FileDialog::Instance().Open("ShaderOpenDialog", "Select a Model", "Model File (*.obj;*.stl){.obj,.stl},.*");
+    }
+  }
+
+  if (ifd::FileDialog::Instance().IsDone("ShaderOpenDialog")) {
+		if (ifd::FileDialog::Instance().HasResult()) {
+			const std::vector<std::filesystem::path>& res = ifd::FileDialog::Instance().GetResults();
+			for (const auto& r : res) {
+        load_new_model = true;
+        mdl_path = r.u8string(); 
+      }
+		}
+		ifd::FileDialog::Instance().Close();
+	}
+
 
   CoCadUI::WindowEnd();
 
 
-  // ================ // UI LOGIN OVERLOAD // =================//
+  // ================ // UI LOGIN/SESSION SECTION // =================//
   ImGui::SetNextWindowPos(ImVec2(window_locs["win_login"].x, window_locs["win_login"].y));
   ImGui::SetNextWindowSize(ImVec2(window_sizes["win_login"].x, window_sizes["win_login"].y));
 
   if (logged_in == false) {
-    CoCadUI::WindowStart("Login");
-    
-    ImGui::Text("Enter Username: ");
-    CoCadUI::InputTextStdString("##loginusrn", &login_username); 
-    ImGui::Text("Enter Password: ");
-    CoCadUI::InputTextStdString("##loginpass", &login_password); 
+    CoCadUI::WindowStart("Login", false);
 
-    if (ImGui::Button("Login")) {
+    // Load and draw icon
+    ImGui::SetCursorPos(ImVec2((fb_width / 2.0f) - (logo_tex.width), (fb_height / 2.0f) - (logo_tex.height * 2.0f)));
+    ImGui::Image((ImTextureID)(intptr_t)logo_tex.ID, ImVec2(logo_tex.width * 2.0f, logo_tex.height * 2.0f));
+
+    ImGui::PushFont(im_font_main_lsz);
+
+    ImVec2 eusr_txt_width = im_font_main_lsz->CalcTextSizeA(40.0f, FLT_MAX, 0.0f, "Enter Username:");
+    ImGui::SetCursorPos(ImVec2((fb_width / 2.0f) - (eusr_txt_width.x / 2.0f), 820.0f));
+    ImGui::Text("Enter Username: ");
+    
+    ImGui::SetCursorPos(ImVec2((fb_width / 2.0f) - 250.0f, 880.0f));
+    ImGui::PushItemWidth(500.0f);
+    CoCadUI::InputTextStdString("##loginusrn", &login_username);
+    ImGui::PopItemWidth();
+
+    ImVec2 epass_txt_width = im_font_main_lsz->CalcTextSizeA(40.0f, FLT_MAX, 0.0f, "Enter Password:");
+    ImGui::SetCursorPos(ImVec2((fb_width / 2.0f) - (epass_txt_width.x / 2.0f), 960.0f));
+    ImGui::Text("Enter Password: ");
+    
+    ImGui::PushItemWidth(500.0f);
+    ImGui::SetCursorPos(ImVec2((fb_width / 2.0f) - 250.0f, 1020.0f));
+    CoCadUI::InputTextStdString("##loginpass", &login_password); 
+    ImGui::PopItemWidth();
+
+    ImGui::SetCursorPos(ImVec2((fb_width / 2.0f) - 200.0f, 1120.0f));
+    if (ImGui::Button("Login", ImVec2(150.0f, 0.0f))) {
       cc_client.AuthenticateLogin(login_username, login_password);
     }
+    ImGui::SameLine();
+    
+    ImGui::SetCursorPos(ImVec2((fb_width / 2.0f) + 50.0f, 1120.0f));
+    if (ImGui::Button("Quit", ImVec2(150.0f, 0.0f))) {
+      glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
 
+    ImGui::PopFont();
+    CoCadUI::WindowEnd();
+  }
+
+  if (logged_in && !sesh_info.currently_in_session && !user.is_host) {
+    CoCadUI::WindowStart("Session Management", false);
+    internal_draw_list = ImGui::GetWindowDrawList();
+    ImGui::PushFont(im_font_main_lsz);
+
+    ImU32 box_color = ImGui::GetColorU32(ImGuiCol_Button);
+    //internal_draw_list->AddRectFilled(ImVec2(512.0f, 252.0f), ImVec2(1888.0f, 300.0f), box_color);
+    std::string usrn = "Username: " + user.username;
+    std::string clID = "ID: " + std::to_string(user.client_ID);
+    
+    ImVec2 dusrn_txt_width = im_font_main_lsz->CalcTextSizeA(40.0f, FLT_MAX, 0.0f, usrn.c_str());
+    ImGui::SetCursorPos(ImVec2(516.0f, 254.0f));
+    ImGui::Text(usrn.c_str());
+    
+    ImGui::SetCursorPos(ImVec2(1280.0f, 254.0f));
+    ImGui::Text(clID.c_str());
+  
+    ImGui::SetCursorPos(ImVec2(1898.0f, 252.0f));
+    if (ImGui::Button("Host", ImVec2(150.0f, 48.0f))) {
+      cc_client.RequestBecomeSH(login_username); 
+    }
+   
+    ImGui::SetCursorPos(ImVec2(516.0f, 326.0f));
+    ImGui::Text("Session ID: ");
+    ImGui::SameLine();
+    
+    ImVec2 dsID_txt_width = im_font_main_lsz->CalcTextSizeA(40.0f, FLT_MAX, 0.0f, "Session ID");
+    ImGui::SetCursorPos(ImVec2(546.0f + dsID_txt_width.x, 322.0f));
+    ImGui::PushItemWidth(500.0f);
+    CoCadUI::InputTextStdString("##joinsessionid", &login_session_id);
+    ImGui::PopItemWidth();
+
+    ImGui::SetCursorPos(ImVec2(1898.0f, 322.0f));
+    if (ImGui::Button("Join", ImVec2(150.0f, 48.0f))) {
+      cc_client.RequestJoinSH(login_session_id);
+    }
+
+    ImGui::SetCursorPos(ImVec2(512.0f, 400.0f));
+    ImGuiWindowFlags session_win_flags = ImGuiWindowFlags_HorizontalScrollbar;
+    ImGui::BeginChild("ActiveSessionsList", ImVec2(1536.0f, 788.0f), ImGuiChildFlags_None, session_win_flags);
+    
+    for (auto session : hosted_sessions) {
+      std::string id_str = "(ID) " + std::to_string(session.first) + "     ";
+      std::string name_str = "(USRN) " + session.second.host_name + "     ";
+      std::string sesh_key_str = "(KEY) " + session.second.session_key;
+      
+      ImGui::Text(id_str.c_str()); ImGui::SameLine();
+      ImGui::Text(name_str.c_str()); ImGui::SameLine();
+      ImGui::Text(sesh_key_str.c_str());
+    }
+
+    ImGui::EndChild();
+
+    ImGui::PopFont();
     CoCadUI::WindowEnd();
   }
   

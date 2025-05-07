@@ -251,6 +251,38 @@ void Editor::SetUpMED() {
   Editor::edge_data_updated = true;
 }
 
+void Editor::RecalculateMED() {
+  Editor::med_unique_edges.clear();
+  Editor::edge_model_mat = glm::mat4(1.0f);
+  Editor::edge_model_mat = glm::scale(Editor::edge_model_mat, glm::vec3(1.0008f, 1.0008f, 1.0008f));
+
+  for (auto f = 0; f < Editor::repr.face_indices.size() / 3; f++) {
+    unsigned int vi0 = Editor::repr.face_indices[(f*3)];
+    unsigned int vi1 = Editor::repr.face_indices[(f*3)+1];
+    unsigned int vi2 = Editor::repr.face_indices[(f*3)+2];
+   
+    unsigned int edges[6] = { vi0, vi1, vi1, vi2, vi2, vi0 };
+    for (auto e = 0; e < 3; e++) {
+      unsigned int indice_one = edges[(2*e)];
+      unsigned int indice_two = edges[(2*e)+1];
+      
+      Edge edge;
+      if (indice_one < indice_two) {
+        edge = std::make_pair(indice_one, indice_two);
+      } else { edge = std::make_pair(indice_two, indice_one); }
+
+      Editor::med_unique_edges.insert(edge);
+    }
+  }
+
+  glBindVertexArray(Editor::med_VAO);
+  glBindBuffer(GL_ARRAY_BUFFER, med_VBO);
+  glBufferData(GL_ARRAY_BUFFER, Editor::med_edge_data.size() * sizeof(float), Editor::med_edge_data.data(), GL_DYNAMIC_DRAW);
+  glBindVertexArray(0);
+
+  Editor::edge_data_updated = true;
+}
+
 void Editor::SetUp(Camera* camera, float w, float h) { 
   Editor::cam = camera;
   Editor::s_width = w;
