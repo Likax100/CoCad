@@ -140,7 +140,5 @@ class App : public Window {
   bool load_new_model = false;
 
   std::map<int, Host> hosted_sessions;
- 
-  // keep track of messages here?
 
 }; 

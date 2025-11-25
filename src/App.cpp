@@ -375,7 +375,7 @@ void App::KeyboardInput(int key, int scancode, int action, int mods) {
 
     if (key == GLFW_KEY_P) { 
       std::cout << "[SELF] Attempting to ping server...\n";
-      cc_client.PingServer(); 
+      cc_client.PingServer(glfwGetTime()); 
     }
 
     if (key == GLFW_KEY_X) { 
@@ -406,9 +406,11 @@ void App::ProcessClient() {
           std::cout << "Server has accepted the connection!\n";
           break;
 
-        case MessageTypes::ServerPing:
+        case MessageTypes::ServerPing: {
           std::cout << "Pinging Bounced back and successful :)\n";
-          break;
+          float time = glfwGetTime() - std::stof(m.dat);
+          std::cout << "Time Taken: " << time << "\n";
+        } break;
 
         case MessageTypes::ccAuthenticationOutcome: {
           if (packet_data[0] == "1") {
@@ -457,11 +459,13 @@ void App::ProcessClient() {
         } break;
 
         case MessageTypes::ccOpRequestSHModelData: {
-          if (m.head.size > 0 && std::stoi(packet_data[0]) == user.client_ID) {
+          if (packet_data[0] != "-1" && std::stoi(packet_data[0]) == user.client_ID) {
             // generate and send repr data to all clients - safe
             CoCadNet::msg<MessageTypes> repr_dat;
             repr_dat.head.ID = MessageTypes::ccOpSHSentModelData;
-            
+           
+            //std::cout << "[DEBUG] PROCESSING REQUEST\n";  
+
             repr_dat.dat = packet_data[1];
 
             repr_dat.dat += "\nogvc";
@@ -488,14 +492,55 @@ void App::ProcessClient() {
             for (int nr_i = 0; nr_i < Editor::repr.normals_redundant.size(); nr_i++) { 
               repr_dat.dat += " " + std::to_string(Editor::repr.normals_redundant[nr_i]); 
             }
-            
+          
+            repr_dat.head.size = repr_dat.dat.size();
+            //std::cout << "[DEBUG-DATA] " << repr_dat.dat << "\n";
             cc_client.send_msg(repr_dat);
           }
         } break;
 
         case MessageTypes::ccOpSHSentModelData: {
           auto repr_data = StringUtil::SplitString(m.dat, "\n");
+          auto clients = StringUtil::SplitString(repr_data[0], " ");
+
+          int count = std::count(clients.begin(), clients.end(), std::to_string(user.client_ID));
+          if (count > 0) {
+            Editor::ClearRepr();
           
+            for (auto line: repr_data) {
+              auto l_data = StringUtil::SplitString(line, " ");
+
+              if (l_data[0] == "ogvc") {
+                for (unsigned int el = 1; el < l_data.size(); el++) { Editor::repr.og_vert_cpy.push_back(std::stof(l_data[el])); }
+              } else if (l_data[0] == "uv") {
+                for (unsigned int el2 = 1; el2 < l_data.size(); el2++) { Editor::repr.unique_verts.push_back(std::stof(l_data[el2])); }
+              } else if (l_data[0] == "ufn") {
+                for (unsigned int el3 = 1; el3 < l_data.size(); el3++) { Editor::repr.unique_face_normals.push_back(std::stof(l_data[el3])); }
+              } else if (l_data[0] == "fi") {
+                for (unsigned int el4 = 1; el4 < l_data.size(); el4++) { Editor::repr.face_indices.push_back(static_cast<unsigned int>(std::stoul(l_data[el4])) ); }
+              } else if (l_data[0] == "nr") {
+                for (unsigned int el5 = 1; el5 < l_data.size(); el5++) { Editor::repr.normals_redundant.push_back(static_cast<unsigned int>(std::stoul(l_data[el5])) ); }
+              }
+            }
+          
+            Editor::instance_data_updated = true;
+            Editor::instance_color_updated = true;
+            Editor::edge_data_updated = true;
+
+            // call recalculation editor funcs
+            Editor::RecalculateMVD();
+            Editor::RecalculateMED();
+
+          }
+       } break;
+
+       case MessageTypes::ccOpBroadcastModelChange: {
+         int count = std::count(packet_data.begin(), packet_data.end(), std::to_string(user.client_ID));
+         if (count > 0) { cc_client.RequestEditorRepr(); }
+       
+auto repr_data = StringUtil::SplitString(m.dat, "\n");
+          //std::cout << "[DEBUG-RECEIVED-DATA] " << m.dat << "\n";
+
           if (repr_data[0] == std::to_string(user.client_ID)) {
             Editor::ClearRepr();
           
@@ -523,12 +568,8 @@ void App::ProcessClient() {
             Editor::RecalculateMVD();
             Editor::RecalculateMED();
           }
-       } break;
 
-       case MessageTypes::ccOpBroadcastModelChange: {
-         int count = std::count(packet_data.begin(), packet_data.end(), std::to_string(user.client_ID));
-         if (count > 0) { cc_client.RequestEditorRepr(); }
-       } break;
+      } break;
 
       }
 
@@ -557,6 +598,7 @@ void App::Update() {
     broad_model.head.ID = MessageTypes::ccOpBroadcastModelChange;
     cc_client.send_msg(broad_model);
 
+    cc_client.UpdateAllConnectedClientEditorRepr(Editor::repr);
     load_new_model = false;
   }
 
@@ -644,6 +686,9 @@ void App::Update() {
         Editor::mvd_c_positions[v_sel].z = Editor::og_mvdc_pos_cpy[v_sel].z + move_by_y;
       }
     }
+
+    // @TEST_Theory
+    cc_client.UpdateAllConnectedClientEditorRepr(Editor::repr);
 
     Editor::edge_data_updated = true;
     Editor::instance_data_updated = true;

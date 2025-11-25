@@ -106,7 +106,7 @@ class CoCadServer : public CoCadNet::i_Server<MessageTypes> {
       switch (m.head.ID) {
 				case MessageTypes::ServerPing: {
 					std::cout << "STATUS-[CLIENT:" << client->get_id() << "] Server Pinged..\n";
-					client->send_msg(m); // send same ping packet back
+          client->send_msg(m); // send same ping packet back
 				} break;
 
         case MessageTypes::ccRequestAuthentication: {
@@ -202,7 +202,7 @@ class CoCadServer : public CoCadNet::i_Server<MessageTypes> {
 
           bool key_valid = hosted_sessions.count(packet_data[0]) > 0 ? true : false;
 
-          std::cout << "[DEBUG] " << packet_data[0] << "\n";
+          //std::cout << "[DEBUG] " << packet_data[0] << "\n";
 
           std::string m_body;
           if (key_valid) {
@@ -222,11 +222,11 @@ class CoCadServer : public CoCadNet::i_Server<MessageTypes> {
           CoCadNet::msg<MessageTypes> m;
           m.head.ID = MessageTypes::ccOpRequestSHModelData;
 
-          std::string m_body;
+          std::string m_body = "-1";
           for (auto session : hosted_sessions) {
             int count = std::count(session.second.connected_IDs.begin(), session.second.connected_IDs.end(), (int)client->get_id());
             if (count > 0) {
-              std::cout << "FOUND CLIENT IN HOST " << session.second.host_ID << "\n";
+              m_body = "";
               m_body += std::to_string(session.second.host_ID) + " ";
               m_body += std::to_string(client->get_id());
               break;
@@ -240,28 +240,31 @@ class CoCadServer : public CoCadNet::i_Server<MessageTypes> {
         } break;
 
         case MessageTypes::ccOpSHSentModelData: {
+          //std::cout << "SIZE OF SERVER SENT MDL DATA: " << m.dat.size();
           CoCadNet::msg<MessageTypes> n;
           n.head.ID = MessageTypes::ccOpSHSentModelData;
           n.dat = m.dat;
+          n.head.size = n.dat.size();
           broadcast_msg(n, client);
         } break;
 
         case MessageTypes::ccOpBroadcastModelChange: {
-          CoCadNet::msg<MessageTypes> m;
-          m.head.ID = MessageTypes::ccOpBroadcastModelChange;
+          CoCadNet::msg<MessageTypes> n;
+          n.head.ID = MessageTypes::ccOpBroadcastModelChange;
           
-          std::string m_body;
+          std::string n_body;
           for (auto session : hosted_sessions) {
             if (session.second.host_ID == (int)client->get_id()) {
               for (auto v = 0; v < session.second.connected_IDs.size(); v++) {
-                m_body += std::to_string(session.second.connected_IDs[v]) + " ";
+                n_body += std::to_string(session.second.connected_IDs[v]) + " ";
               }
             }
           }
+          n_body += "\n";
 
-          m.dat = m_body;
-          m.head.size = m.dat.size();
-          broadcast_msg(m, client);
+          n.dat = n_body + m.dat;
+          n.head.size = n.dat.size();
+          broadcast_msg(n, client);
         } break;
 
 				/*
